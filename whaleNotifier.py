@@ -178,8 +178,8 @@ HTML = """
   header { padding:1.5rem 2rem; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:1rem; }
   header h1 { font-family:'Syne',sans-serif; font-size:1.6rem; font-weight:800; color:var(--accent); }
   header span { color:var(--muted); font-size:0.75rem; }
-  .tabs { display:flex; border-bottom:1px solid var(--border); padding:0 2rem; }
-  .tab { padding:0.75rem 1.5rem; cursor:pointer; font-size:0.78rem; color:var(--muted); border-bottom:2px solid transparent; transition:all 0.2s; }
+  .tabs { display:flex; border-bottom:1px solid var(--border); padding:0 2rem; overflow-x:auto; }
+  .tab { padding:0.75rem 1.2rem; cursor:pointer; font-size:0.78rem; color:var(--muted); border-bottom:2px solid transparent; transition:all 0.2s; white-space:nowrap; }
   .tab.active { color:var(--accent); border-bottom-color:var(--accent); }
   .tab-content { display:none; }
   .tab-content.active { display:block; }
@@ -200,6 +200,8 @@ HTML = """
   button:hover { opacity:0.8; }
   .btn-ghost { background:transparent; border:1px solid var(--border); color:var(--muted); font-size:0.7rem; }
   .btn-ghost:hover { border-color:var(--accent); color:var(--accent); opacity:1; }
+  .btn-export { background:#1a3050; color:var(--accent); border:1px solid var(--accent); }
+  .btn-export:hover { background:var(--accent); color:#000; opacity:1; }
   .table-wrap { overflow-x:auto; padding-bottom:2rem; }
   table { width:100%; border-collapse:collapse; font-size:0.76rem; }
   th { text-align:left; padding:0.55rem 1rem; color:var(--muted); font-size:0.62rem; text-transform:uppercase; letter-spacing:0.08em; border-bottom:1px solid var(--border); position:sticky; top:0; background:var(--bg); }
@@ -216,17 +218,33 @@ HTML = """
   #count { color:var(--muted); font-size:0.73rem; }
   .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.85); z-index:1000; align-items:center; justify-content:center; }
   .modal-overlay.open { display:flex; }
-  .modal { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:1.5rem; width:90%; max-width:700px; position:relative; }
+  .modal { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:1.5rem; width:90%; max-width:700px; position:relative; max-height:90vh; overflow-y:auto; }
   .modal h2 { font-family:'Syne',sans-serif; font-size:1.1rem; color:var(--accent); margin-bottom:0.3rem; }
   .modal-meta { font-size:0.7rem; color:var(--muted); margin-bottom:1rem; }
   .modal-close { position:absolute; top:1rem; right:1rem; background:transparent; border:1px solid var(--border); color:var(--muted); width:28px; height:28px; border-radius:50%; cursor:pointer; font-size:1rem; display:flex; align-items:center; justify-content:center; }
   .modal-close:hover { border-color:var(--red); color:var(--red); opacity:1; }
-  .chart-container { position:relative; height:280px; }
+  .chart-container { position:relative; height:280px; margin-bottom:1rem; }
   .no-data { text-align:center; color:var(--muted); padding:3rem; font-size:0.8rem; }
-  .result-badge { display:inline-block; padding:0.2rem 0.6rem; border-radius:4px; font-size:0.7rem; font-weight:700; margin-left:0.5rem; }
+  .result-badge { display:inline-block; padding:0.2rem 0.6rem; border-radius:4px; font-size:0.7rem; font-weight:700; }
   .result-pos { background:#00ff8820; color:var(--green); border:1px solid var(--green); }
   .result-neg { background:#ff446620; color:var(--red); border:1px solid var(--red); }
   .results-info { padding:1rem 2rem; color:var(--muted); font-size:0.75rem; border-bottom:1px solid var(--border); }
+  .analytics-grid { display:grid; grid-template-columns:1fr 1fr; gap:1.5rem; padding:1.5rem 2rem; }
+  @media(max-width:700px){ .analytics-grid { grid-template-columns:1fr; } }
+  .analytics-card { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:1.2rem; }
+  .analytics-card h3 { font-family:'Syne',sans-serif; font-size:0.85rem; color:var(--accent); margin-bottom:1rem; }
+  .analytics-card canvas { max-height:260px; }
+  .winrate-row { display:flex; align-items:center; gap:0.5rem; margin-bottom:0.5rem; font-size:0.72rem; }
+  .winrate-bar-wrap { flex:1; background:#0f1a28; border-radius:4px; height:8px; overflow:hidden; }
+  .winrate-bar { height:100%; border-radius:4px; transition:width 0.5s; }
+  .winrate-label { width:80px; color:var(--muted); font-size:0.65rem; }
+  .winrate-pct { width:40px; text-align:right; font-weight:700; font-size:0.7rem; }
+  .equity-info { font-size:0.7rem; color:var(--muted); margin-bottom:0.75rem; }
+  .export-section { padding:1.5rem 2rem; border-top:1px solid var(--border); }
+  .export-section h3 { font-family:'Syne',sans-serif; font-size:0.85rem; color:var(--accent); margin-bottom:1rem; }
+  .export-grid { display:flex; gap:1rem; flex-wrap:wrap; }
+  .export-card { background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:1rem; flex:1; min-width:200px; }
+  .export-card p { font-size:0.7rem; color:var(--muted); margin-bottom:0.75rem; line-height:1.5; }
 </style>
 </head>
 <body>
@@ -235,11 +253,14 @@ HTML = """
   <button class="btn-ghost" onclick="loadAll()">↻ Actualizar</button>
 </header>
 <div class="stats" id="stats"></div>
-<div class="top-pairs"><h3>Pares más activos</h3><div class="pair-bars" id="topPairs"></div></div>
+<div class="top-pairs"><h3>Pares más activos — clic para filtrar</h3><div class="pair-bars" id="topPairs"></div></div>
 <div class="tabs">
   <div class="tab active" onclick="switchTab('signals')">📋 Señales</div>
   <div class="tab" onclick="switchTab('results')">📊 Resultados 24h</div>
+  <div class="tab" onclick="switchTab('analytics')">🔬 Análisis</div>
 </div>
+
+<!-- TAB SEÑALES -->
 <div class="tab-content active" id="tab-signals">
   <div class="controls">
     <input type="text" id="filterPair" placeholder="Filtrar par (ej: BTC)" onkeyup="if(event.key==='Enter') loadSignals()">
@@ -263,8 +284,10 @@ HTML = """
     </table>
   </div>
 </div>
+
+<!-- TAB RESULTADOS -->
 <div class="tab-content" id="tab-results">
-  <div class="results-info">Señales con tracking completado — muestra el % de cambio al final del periodo</div>
+  <div class="results-info">Señales con tracking completado — % de cambio al final del periodo de seguimiento</div>
   <div class="table-wrap">
     <table>
       <thead><tr><th>#</th><th>Fecha</th><th>Par</th><th>Lado</th><th>Diff señal</th><th>Vol EUR</th><th>Resultado</th><th>Horas</th><th>Chart</th></tr></thead>
@@ -272,6 +295,43 @@ HTML = """
     </table>
   </div>
 </div>
+
+<!-- TAB ANÁLISIS -->
+<div class="tab-content" id="tab-analytics">
+  <div class="analytics-grid">
+    <!-- Win Rate por par -->
+    <div class="analytics-card" style="grid-column:1/-1">
+      <h3>🏆 Win Rate por par — % de señales con resultado positivo a 24h</h3>
+      <div id="winrate-list"><div class="no-data">Cargando...</div></div>
+    </div>
+    <!-- Curva de equity -->
+    <div class="analytics-card" style="grid-column:1/-1">
+      <h3>📈 Curva de equity simulada — resultado acumulado si seguías cada señal</h3>
+      <div class="equity-info">Asume entrada al precio de señal, salida a las 24h. Sin comisiones.</div>
+      <div class="chart-container"><canvas id="equityChart"></canvas></div>
+    </div>
+  </div>
+  <!-- Exportar CSV -->
+  <div class="export-section">
+    <h3>📥 Exportar datos</h3>
+    <div class="export-grid">
+      <div class="export-card">
+        <p>Todas las señales con sus datos completos. Ideal para análisis con IA.</p>
+        <button class="btn-export" onclick="exportCSV('signals')">⬇ Señales CSV</button>
+      </div>
+      <div class="export-card">
+        <p>Señales con resultado final a 24h. Para analizar qué estrategia funciona.</p>
+        <button class="btn-export" onclick="exportCSV('results')">⬇ Resultados CSV</button>
+      </div>
+      <div class="export-card">
+        <p>Win rate por par ordenado. Para saber qué monedas seguir.</p>
+        <button class="btn-export" onclick="exportCSV('winrate')">⬇ Win Rate CSV</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL GRÁFICA -->
 <div class="modal-overlay" id="modal">
   <div class="modal">
     <button class="modal-close" onclick="closeModal()">×</button>
@@ -281,24 +341,33 @@ HTML = """
     <div id="no-data" class="no-data" style="display:none">⏳ Sin datos de tracking aún — empieza 5 minutos después de la señal</div>
   </div>
 </div>
+
 <script>
 let chartInstance = null;
+let equityChart = null;
+
 function fmt(n) {
   if (!n && n!==0) return '—';
   if (Math.abs(n)>=1e6) return (n/1e6).toFixed(2)+'M';
   if (Math.abs(n)>=1e3) return (n/1e3).toFixed(2)+'K';
   return parseFloat(n).toFixed(2);
 }
+
 function switchTab(tab) {
-  document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',['signals','results'][i]===tab));
+  const tabs = ['signals','results','analytics'];
+  document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active', tabs[i]===tab));
   document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));
   document.getElementById('tab-'+tab).classList.add('active');
   if(tab==='results') loadResults();
+  if(tab==='analytics') loadAnalytics();
 }
+
 async function loadAll() {
-  await loadStats(); await loadSignals();
+  await loadStats();
+  await loadSignals();
   document.getElementById('lastUpdate').textContent='Actualizado: '+new Date().toLocaleTimeString();
 }
+
 async function loadStats() {
   const s=await(await fetch('/api/stats')).json();
   document.getElementById('stats').innerHTML=`
@@ -311,10 +380,12 @@ async function loadStats() {
   document.getElementById('topPairs').innerHTML=s.top_pairs.map(p=>
     `<div class="pair-chip" onclick="filterByPair('${p.pair}')">${p.pair}<span class="count">${p.count}</span></div>`).join('');
 }
+
 function filterByPair(pair) {
   document.getElementById('filterPair').value=pair.replace('/','');
   switchTab('signals'); loadSignals();
 }
+
 async function loadSignals() {
   const pair=document.getElementById('filterPair').value;
   const side=document.getElementById('filterSide').value;
@@ -322,20 +393,89 @@ async function loadSignals() {
   const data=await(await fetch(`/api/signals?pair=${pair}&side=${side}&limit=${limit}`)).json();
   document.getElementById('count').textContent=`${data.length} señales`;
   document.getElementById('tbody').innerHTML=data.map(s=>{
-    const side=s.side==='b'?'<span class="buy">🍏 BUY</span>':'<span class="sell">🍎 SELL</span>';
+    const sideHtml=s.side==='b'?'<span class="buy">🍏 BUY</span>':'<span class="sell">🍎 SELL</span>';
     const diff=s.price_diff_pct>=0?`<span class="pos">+${s.price_diff_pct}%</span>`:`<span class="neg">${s.price_diff_pct}%</span>`;
-    return `<tr><td style="color:var(--muted)">#${s.id}</td><td style="color:var(--muted);font-size:0.7rem">${s.timestamp.replace('T',' ').substring(0,19)}</td><td><span class="pair-tag">${s.pair}</span></td><td>${side}</td><td>${diff}</td><td class="vol" style="font-size:0.7rem">${parseFloat(s.price_to).toPrecision(4)}</td><td class="vol">${fmt(s.volume_eur)}€</td><td style="color:var(--muted)">${s.num_trades}</td><td><button class="btn-chart" onclick="openChart(${s.id},'${s.pair}','${s.side}',${s.price_to})">📈</button></td></tr>`;
+    return `<tr><td style="color:var(--muted)">#${s.id}</td><td style="color:var(--muted);font-size:0.7rem">${s.timestamp.replace('T',' ').substring(0,19)}</td><td><span class="pair-tag">${s.pair}</span></td><td>${sideHtml}</td><td>${diff}</td><td class="vol" style="font-size:0.7rem">${parseFloat(s.price_to).toPrecision(4)}</td><td class="vol">${fmt(s.volume_eur)}€</td><td style="color:var(--muted)">${s.num_trades}</td><td><button class="btn-chart" onclick="openChart(${s.id},'${s.pair}','${s.side}',${s.price_to})">📈</button></td></tr>`;
   }).join('')||'<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:2rem">No hay señales</td></tr>';
 }
+
 async function loadResults() {
   const data=await(await fetch('/api/results')).json();
   document.getElementById('tbody-results').innerHTML=data.map(s=>{
-    const side=s.side==='b'?'<span class="buy">🍏 BUY</span>':'<span class="sell">🍎 SELL</span>';
+    const sideHtml=s.side==='b'?'<span class="buy">🍏 BUY</span>':'<span class="sell">🍎 SELL</span>';
     const diff=s.price_diff_pct>=0?`<span class="pos">+${s.price_diff_pct}%</span>`:`<span class="neg">${s.price_diff_pct}%</span>`;
     const result=s.final_change>=0?`<span class="result-badge result-pos">+${s.final_change}%</span>`:`<span class="result-badge result-neg">${s.final_change}%</span>`;
-    return `<tr><td style="color:var(--muted)">#${s.id}</td><td style="color:var(--muted);font-size:0.7rem">${s.timestamp.substring(0,16)}</td><td><span class="pair-tag">${s.pair}</span></td><td>${side}</td><td>${diff}</td><td class="vol">${fmt(s.volume_eur)}€</td><td>${result}</td><td style="color:var(--muted)">${Math.round(s.final_minutes/60)}h</td><td><button class="btn-chart" onclick="openChart(${s.id},'${s.pair}','${s.side}',null)">📈</button></td></tr>`;
+    return `<tr><td style="color:var(--muted)">#${s.id}</td><td style="color:var(--muted);font-size:0.7rem">${s.timestamp.substring(0,16)}</td><td><span class="pair-tag">${s.pair}</span></td><td>${sideHtml}</td><td>${diff}</td><td class="vol">${fmt(s.volume_eur)}€</td><td>${result}</td><td style="color:var(--muted)">${Math.round(s.final_minutes/60)}h</td><td><button class="btn-chart" onclick="openChart(${s.id},'${s.pair}','${s.side}',null)">📈</button></td></tr>`;
   }).join('')||'<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:2rem">Aún no hay señales con tracking completado</td></tr>';
 }
+
+async function loadAnalytics() {
+  const [wr, eq] = await Promise.all([
+    fetch('/api/winrate').then(r=>r.json()),
+    fetch('/api/equity').then(r=>r.json())
+  ]);
+  renderWinRate(wr);
+  renderEquity(eq);
+}
+
+function renderWinRate(data) {
+  if (!data || data.length===0) {
+    document.getElementById('winrate-list').innerHTML='<div class="no-data">Sin datos de tracking aún — necesitas señales con 24h completadas</div>';
+    return;
+  }
+  const maxCount = Math.max(...data.map(d=>d.total));
+  document.getElementById('winrate-list').innerHTML = data.map(d => {
+    const pct = d.winrate;
+    const color = pct>=60?'#00ff88':pct>=40?'#ffaa00':'#ff4466';
+    const sideLabel = d.side==='b'?'🍏':(d.side==='s'?'🍎':'📊');
+    return `<div class="winrate-row">
+      <div class="winrate-label">${sideLabel} <span style="color:var(--accent)">${d.pair}</span></div>
+      <div class="winrate-bar-wrap"><div class="winrate-bar" style="width:${pct}%;background:${color}"></div></div>
+      <div class="winrate-pct" style="color:${color}">${pct}%</div>
+      <div style="color:var(--muted);font-size:0.62rem;width:50px">${d.wins}/${d.total}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderEquity(data) {
+  if (!data || data.length===0) {
+    return;
+  }
+  if (equityChart) { equityChart.destroy(); equityChart=null; }
+  const labels = data.map(d=>d.timestamp.substring(0,10));
+  const values = data.map(d=>d.cumulative);
+  const lastVal = values[values.length-1] || 0;
+  const color = lastVal>=0?'#00ff88':'#ff4466';
+  equityChart = new Chart(document.getElementById('equityChart'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Equity acumulado %',
+        data: values,
+        borderColor: color,
+        backgroundColor: color+'15',
+        borderWidth: 2,
+        pointRadius: 2,
+        tension: 0.3,
+        fill: true
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { labels: { color:'#4a6080', font:{family:'Space Mono',size:10} } },
+        tooltip: { backgroundColor:'#0d1420', borderColor:'#1a2535', borderWidth:1, titleColor:'#c8d8e8', bodyColor:'#c8d8e8' }
+      },
+      scales: {
+        x: { ticks:{color:'#4a6080',font:{size:9},maxTicksLimit:10}, grid:{color:'#0f1a28'} },
+        y: { ticks:{color:color,font:{size:9},callback:v=>v+'%'}, grid:{color:'#0f1a28'} }
+      }
+    }
+  });
+}
+
 async function openChart(signalId,pair,side,entryPrice) {
   document.getElementById('modal').classList.add('open');
   document.getElementById('modal-title').textContent=`${pair} — Señal #${signalId}`;
@@ -350,8 +490,14 @@ async function openChart(signalId,pair,side,entryPrice) {
   const color=pts[pts.length-1].pct_change>=0?'#00ff88':'#ff4466';
   chartInstance=new Chart(document.getElementById('priceChart'),{type:'line',data:{labels:pts.map(p=>`+${p.minutes}min`),datasets:[{label:'Precio',data:pts.map(p=>p.price),borderColor:color,backgroundColor:color+'15',borderWidth:2,pointRadius:0,tension:0.3,fill:true,yAxisID:'y'},{label:'% cambio',data:pts.map(p=>p.pct_change),borderColor:'#00d4ff',borderWidth:1,borderDash:[4,4],pointRadius:0,tension:0.3,fill:false,yAxisID:'y2'}]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:{labels:{color:'#4a6080',font:{family:'Space Mono',size:10}}},tooltip:{backgroundColor:'#0d1420',borderColor:'#1a2535',borderWidth:1,titleColor:'#c8d8e8',bodyColor:'#c8d8e8'}},scales:{x:{ticks:{color:'#4a6080',font:{size:9},maxTicksLimit:12},grid:{color:'#0f1a28'}},y:{ticks:{color:'#00ff88',font:{size:9}},grid:{color:'#0f1a28'},position:'left'},y2:{ticks:{color:'#00d4ff',font:{size:9}},grid:{display:false},position:'right'}}}});
 }
+
 function closeModal(){document.getElementById('modal').classList.remove('open');if(chartInstance){chartInstance.destroy();chartInstance=null;}}
 document.getElementById('modal').addEventListener('click',e=>{if(e.target===document.getElementById('modal'))closeModal();});
+
+function exportCSV(type) {
+  window.location.href='/api/export/'+type;
+}
+
 loadAll();
 setInterval(loadAll,30000);
 </script>
@@ -417,6 +563,78 @@ def api_results():
         ORDER BY s.id DESC LIMIT 200
     """))
 
+@app.route('/api/winrate')
+def api_winrate():
+    # Win rate por par y lado: % de señales con resultado final positivo
+    data = db_get("""
+        SELECT s.pair, s.side,
+               COUNT(*) as total,
+               SUM(CASE WHEN pt.pct_change > 0 THEN 1 ELSE 0 END) as wins,
+               ROUND(100.0 * SUM(CASE WHEN pt.pct_change > 0 THEN 1 ELSE 0 END) / COUNT(*), 1) as winrate
+        FROM signals s
+        JOIN price_tracking pt ON pt.signal_id=s.id
+        WHERE pt.minutes=(SELECT MAX(minutes) FROM price_tracking WHERE signal_id=s.id)
+        GROUP BY s.pair, s.side
+        HAVING total >= 2
+        ORDER BY winrate DESC, total DESC
+        LIMIT 30
+    """)
+    return jsonify(data)
+
+@app.route('/api/equity')
+def api_equity():
+    # Curva de equity: suma acumulada de pct_change de cada señal finalizada
+    data = db_get("""
+        SELECT s.timestamp, s.pair, s.side, pt.pct_change
+        FROM signals s
+        JOIN price_tracking pt ON pt.signal_id=s.id
+        WHERE pt.minutes=(SELECT MAX(minutes) FROM price_tracking WHERE signal_id=s.id)
+        ORDER BY s.timestamp ASC
+    """)
+    cumulative = 0.0
+    result = []
+    for row in data:
+        cumulative = round(cumulative + (row['pct_change'] or 0), 2)
+        result.append({'timestamp': row['timestamp'], 'pair': row['pair'], 'pct_change': row['pct_change'], 'cumulative': cumulative})
+    return jsonify(result)
+
+@app.route('/api/export/<export_type>')
+def api_export(export_type):
+    from flask import Response
+    import io, csv
+    if export_type == 'signals':
+        data = db_get("SELECT * FROM signals ORDER BY id DESC")
+        fields = ['id','timestamp','pair','side','price_from','price_to','price_diff_pct','volume_token','volume_eur','order_type','num_trades']
+        filename = 'whale_signals.csv'
+    elif export_type == 'results':
+        data = db_get("""
+            SELECT s.id,s.timestamp,s.pair,s.side,s.price_diff_pct,s.volume_eur,
+                   pt.pct_change as resultado_24h, pt.minutes as minutos_tracking
+            FROM signals s JOIN price_tracking pt ON pt.signal_id=s.id
+            WHERE pt.minutes=(SELECT MAX(minutes) FROM price_tracking WHERE signal_id=s.id)
+            ORDER BY s.id DESC
+        """)
+        fields = ['id','timestamp','pair','side','price_diff_pct','volume_eur','resultado_24h','minutos_tracking']
+        filename = 'whale_results.csv'
+    elif export_type == 'winrate':
+        data = db_get("""
+            SELECT s.pair, s.side, COUNT(*) as total,
+                   SUM(CASE WHEN pt.pct_change > 0 THEN 1 ELSE 0 END) as wins,
+                   ROUND(100.0 * SUM(CASE WHEN pt.pct_change > 0 THEN 1 ELSE 0 END) / COUNT(*), 1) as winrate
+            FROM signals s JOIN price_tracking pt ON pt.signal_id=s.id
+            WHERE pt.minutes=(SELECT MAX(minutes) FROM price_tracking WHERE signal_id=s.id)
+            GROUP BY s.pair, s.side HAVING total >= 2 ORDER BY winrate DESC
+        """)
+        fields = ['pair','side','total','wins','winrate']
+        filename = 'whale_winrate.csv'
+    else:
+        return jsonify({'error': 'Unknown export type'})
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=fields, extrasaction='ignore')
+    writer.writeheader()
+    writer.writerows(data)
+    return Response(output.getvalue(), mimetype='text/csv',
+                    headers={'Content-Disposition': f'attachment;filename={filename}'})
 def run_dashboard():
     import logging
     log = logging.getLogger('werkzeug')
