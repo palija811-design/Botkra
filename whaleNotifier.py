@@ -19,6 +19,7 @@ import math
 import os
 import traceback
 import sqlite3
+import threading
 
 #Definir environmets
 myhost = os.uname()[1]
@@ -56,28 +57,32 @@ def init_db():
     conn.close()
     print(f"BD lista en: {DB_PATH}")
 
+# Lock para evitar escrituras simultáneas en la BD
+db_lock = threading.Lock()
+
 def save_signal(tradeDF, pair, volInEUR, priceDiff):
     try:
-        conn = sqlite3.connect(DB_PATH)
-        conn.execute("""
-            INSERT INTO signals
-            (timestamp, pair, side, price_from, price_to, price_diff_pct,
-             volume_token, volume_eur, order_type, num_trades)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            datetime.now().isoformat(),
-            pair,
-            tradeDF["side"].iloc[0],
-            float(tradeDF["price"].iloc[0]),
-            float(tradeDF["price"].iloc[-1]),
-            round(priceDiff, 4),
-            round(float(sum(pd.to_numeric(tradeDF["volume"]))), 6),
-            round(volInEUR, 2),
-            tradeDF["orderType"].iloc[0],
-            len(tradeDF)
-        ))
-        conn.commit()
-        conn.close()
+        with db_lock:
+            conn = sqlite3.connect(DB_PATH)
+            conn.execute("""
+                INSERT INTO signals
+                (timestamp, pair, side, price_from, price_to, price_diff_pct,
+                 volume_token, volume_eur, order_type, num_trades)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                datetime.now().isoformat(),
+                pair,
+                tradeDF["side"].iloc[0],
+                float(tradeDF["price"].iloc[0]),
+                float(tradeDF["price"].iloc[-1]),
+                round(priceDiff, 4),
+                round(float(sum(pd.to_numeric(tradeDF["volume"]))), 6),
+                round(volInEUR, 2),
+                tradeDF["orderType"].iloc[0],
+                len(tradeDF)
+            ))
+            conn.commit()
+            conn.close()
     except Exception as e:
         print(f"Error guardando en BD: {e}")
 
@@ -128,10 +133,11 @@ def getNamesForWS(pairs):
     return(wsnames)
 
 
-def getEurWsnames(wsnames):
-    # Solo pares con EUR — los más relevantes para detectar ballenas
-    eurWsnames = {k: v for k, v in wsnames.items() if re.findall("/EUR$|^EUR/", v)}
-    return(eurWsnames)
+def filterPairs(wsnames, currency):
+    # Filtra pares por moneda base (EUR o USD)
+    filtered = {k: v for k, v in wsnames.items()
+                if re.findall(f"/{currency}$|^{currency}/", v)}
+    return(filtered)
 
 
 def volumeInEUR(wsnames, pair, volume, eurPrices):
@@ -189,13 +195,13 @@ def connectToWS(pairsList):
             time.sleep(i)
             i = i + 1
             continue
-    # Suscribir en grupos de 50
-    chunks = [pairsList[i:i+50] for i in range(0, len(pairsList), 50)]
+    # Suscribir en grupos de 50 con 1s de pausa
+    chunks = [pairsList[i:i+25] for i in range(0, len(pairsList), 25)]
     for chunk in chunks:
         msg = json.dumps({"event": "subscribe", "pair": chunk, "subscription": {"name": "trade"}})
         ws[0].send(msg)
         ws[1].send(msg)
-        time.sleep(1)
+        time.sleep(2)
     return(ws)
 
 
@@ -228,21 +234,21 @@ def createTGmessage(tradeDF, pair, volInEUR, priceDiff, wsnames, pairs):
 
     token = pair.split("/")[0]
     base = pair.split("/")[1]
-    
+
     tokenNormalized = "BTC" if token == "XBT" else token
     baseNormalized  = "BTC" if base == "XBT" else base
-    
+
     volumeToken = round(sum(pd.to_numeric(tradeDF["volume"])), 3)
     volumeTokenAnnotated = anotateVolume(volumeToken)
-    
+
     volumeBase = round(sum(pd.to_numeric(tradeDF["volume"]) * pd.to_numeric(tradeDF["price"])), 3)
     volumeBase = anotateVolume(volumeBase)
-    
+
     sign = '\U0001F34F' if tradeDF["side"][0] == "b" else '\U0001F34E-'
-    
+
     whaleSize = int(math.log10(volInEUR/1000)+1)
     whaleEmojis = "\U0001F433" * whaleSize
-    
+
     if(priceDiff >= 5 and priceDiff < 10):
         changeEmoji = '\U0001F632'
     elif(priceDiff >= 10 and priceDiff < 20):
@@ -267,7 +273,7 @@ def createTGmessage(tradeDF, pair, volInEUR, priceDiff, wsnames, pairs):
     pairToNonKraken = list(wsnames.keys())[list(wsnames.values()).index(pair)]
     leverage = {key:value.get('leverage_sell') for (key, value) in pairs.items() if value.get('leverage_sell') is not None}
     pairLeverage = leverage[pairToNonKraken]
-    
+
     if(pairLeverage != []):
         maxLeverage = max(leverage[pairToNonKraken])
         direction = "s" if tradeDF["side"][0] == "b" else "b"
@@ -278,7 +284,7 @@ def createTGmessage(tradeDF, pair, volInEUR, priceDiff, wsnames, pairs):
         marginMessage = f"\n`/add {tokenNormalized} {baseNormalized} {size} {direction} {distanceTrade} {distanceTolerance} {setmaxLeverage}`"
     else:
         marginMessage = ""
-    
+
     quintaLinea = marginMessage
     tgMessage = f"{primeraLinea} {segundaLinea} {terceraLinea} {cuartaLinea} {quintaLinea}"
     return(tgMessage)
@@ -295,42 +301,33 @@ def telegram_bot_sendtext(bot_message):
     return response.json()
 
 
-def connectTradeWS():
-    init_db()
-    print("Getting pairs...")
-    pairs = getPairs()
-    wsnames = getNamesForWS(pairs)
-
-    # Solo pares EUR — evita saturar Kraken con 1500+ pares
-    eurWsnames = getEurWsnames(wsnames)
-    print(f"Following {len(eurWsnames)} EUR pairs (of {len(wsnames)} total)")
-
-    eurPrices = getEurPrice(wsnames)
-    pairsList = list(eurWsnames.values())
-
-    print("Connecting to WebSocket...")
+def tradeLoop(pairsList, wsnames, pairs, eurPrices, label):
+    """Bucle principal para un conjunto de pares — corre en su propio hilo."""
+    print(f"[{label}] Conectando {len(pairsList)} pares...")
     ws = connectToWS(pairsList)
-    print("Sent and Subscribed")
-    print("Receiving...")
-    telegram_bot_sendtext("\U0001F40D Levantado")
+    print(f"[{label}] Subscrito y recibiendo...")
+
+    # Compartir eurPrices entre hilos de forma segura
+    eurPrices_lock = threading.Lock()
+    local_eurPrices = eurPrices.copy()
 
     while True:
         try:
             firstReceived = receiveSafeWS(ws)
             if firstReceived is None:
-                raise Exception("receiveSafeWS returned None — reconnecting")
+                raise Exception(f"[{label}] receiveSafeWS returned None")
             result = list(json.loads(firstReceived))
 
             while type(result[0]) != int:
                 firstReceived = receiveSafeWS(ws)
                 if firstReceived is None:
-                    raise Exception("receiveSafeWS returned None — reconnecting")
+                    raise Exception(f"[{label}] receiveSafeWS returned None")
                 result = list(json.loads(firstReceived))
-            
+
             while len(result) == 1:
                 firstReceived = receiveSafeWS(ws)
                 if firstReceived is None:
-                    raise Exception("receiveSafeWS returned None — reconnecting")
+                    raise Exception(f"[{label}] receiveSafeWS returned None")
                 result = list(json.loads(firstReceived))
 
             if len(result[1]) != 1:
@@ -338,45 +335,104 @@ def connectTradeWS():
                 tradeDF = tradeDF.sort_values(by=["time"])
                 prices = pd.to_numeric(tradeDF["price"])
                 priceDiff = abs(float((prices.iloc[0] - prices.iloc[-1]) * 100 / prices.iloc[0]))
-                
+
                 pair = result[3]
                 volume = sum(pd.to_numeric(tradeDF["volume"]))
-                volInEUR = volumeInEUR(wsnames, pair, volume, eurPrices)
-                
+                volInEUR = volumeInEUR(wsnames, pair, volume, local_eurPrices)
+
                 if(volInEUR == 0 or priceDiff > 3 and volInEUR > 2000):
                     priceDiff = round(priceDiff, 3)
-                    print("\U0001F433", priceDiff, pair)
+                    print(f"\U0001F433 [{label}]", priceDiff, pair)
                     save_signal(tradeDF, pair, volInEUR, priceDiff)
                     TGmsg = createTGmessage(tradeDF, pair, volInEUR, priceDiff, wsnames, pairs)
                     telegram_bot_sendtext(TGmsg)
                 else:
-                    print(len(tradeDF), end=" ", flush=True)
+                    print(".", end="", flush=True)
 
-            if(datetime.now().minute % 5 == 0 and datetime.now().second == 10):
-                time.sleep(1)
-                updatedPairs = getPairs()
-                updatedWsnames = getNamesForWS(updatedPairs)
-                updatedEurWsnames = getEurWsnames(updatedWsnames)
-                if(len(updatedEurWsnames) != len(eurWsnames)):
-                    print("New pairs. Updating...")
-                    pairs = updatedPairs
-                    wsnames = updatedWsnames
-                    eurWsnames = updatedEurWsnames
-                    ws[0].close()
-                    ws[1].close()
-                    connectTradeWS()
-
+            # Actualizar precios EUR cada minuto
             if(datetime.now().second == 0):
                 time.sleep(1)
-                eurPrices = getEurPrice(wsnames)
-                print("✓ ", end="")
+                with eurPrices_lock:
+                    local_eurPrices = getEurPrice(wsnames)
+                print(f"✓[{label}] ", end="")
 
         except Exception:
             traceback.print_exc()
-            print("Disconnected. Trying...")
-            telegram_bot_sendtext("\U0001F534 CAÍDO \U0001F534")
+            print(f"[{label}] Disconnected. Reconnecting in 5s...")
             time.sleep(5)
-            connectTradeWS()
+            try:
+                ws = connectToWS(pairsList)
+            except Exception:
+                time.sleep(30)
+
+
+def connectTradeWS():
+    init_db()
+    print("Getting pairs...")
+    pairs = getPairs()
+    wsnames = getNamesForWS(pairs)
+    print(f"Total pairs: {len(wsnames)}")
+
+    eurPrices = getEurPrice(wsnames)
+
+    # Separar pares EUR y USD
+    eurWsnames = filterPairs(wsnames, "EUR")
+    usdWsnames = filterPairs(wsnames, "USD")
+
+    # Quitar pares USD que ya están en EUR (para no duplicar)
+    usdOnlyWsnames = {k: v for k, v in usdWsnames.items() if k not in eurWsnames}
+
+    eurList = list(eurWsnames.values())
+    usdList = list(usdOnlyWsnames.values())
+
+    print(f"EUR pairs: {len(eurList)} | USD-only pairs: {len(usdList)}")
+
+    telegram_bot_sendtext(f"\U0001F40D Levantado — EUR: {len(eurList)} pares | USD: {len(usdList)} pares")
+
+    # Hilo EUR
+    t_eur = threading.Thread(
+        target=tradeLoop,
+        args=(eurList, wsnames, pairs, eurPrices, "EUR"),
+        daemon=True
+    )
+
+    # Esperar 30s antes de arrancar USD para no saturar Kraken
+    time.sleep(60)
+
+    # Hilo USD
+    t_usd = threading.Thread(
+        target=tradeLoop,
+        args=(usdList, wsnames, pairs, eurPrices, "USD"),
+        daemon=True
+    )
+
+    t_eur.start()
+    print("Hilo EUR arrancado")
+
+    time.sleep(60)
+
+    t_usd.start()
+    print("Hilo USD arrancado")
+
+    # Mantener vivo el proceso principal
+    while True:
+        time.sleep(60)
+        if not t_eur.is_alive():
+            print("⚠️ Hilo EUR muerto — reiniciando...")
+            t_eur = threading.Thread(
+                target=tradeLoop,
+                args=(eurList, wsnames, pairs, eurPrices, "EUR"),
+                daemon=True
+            )
+            t_eur.start()
+        if not t_usd.is_alive():
+            print("⚠️ Hilo USD muerto — reiniciando...")
+            t_usd = threading.Thread(
+                target=tradeLoop,
+                args=(usdList, wsnames, pairs, eurPrices, "USD"),
+                daemon=True
+            )
+            t_usd.start()
 
 
 # Create msg for connection
