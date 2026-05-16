@@ -130,7 +130,7 @@ def getNamesForWS(pairs):
 
 def getEurWsnames(wsnames):
     # Solo pares con EUR — los más relevantes para detectar ballenas
-    eurWsnames = {k: v for k, v in wsnames.items() if re.findall("/EUR$|^EUR/", v)}
+    eurWsnames = {k: v for k, v in wsnames.items() if re.findall("/EUR$|^EUR/|/USD$|^USD/", v)}
     return(eurWsnames)
 
 
