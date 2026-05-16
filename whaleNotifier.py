@@ -272,7 +272,7 @@ def createTGmessage(tradeDF, pair, volInEUR, priceDiff, wsnames, pairs):
 
     fromPrice = tradeDF["price"].iloc[0]
     toPrice = tradeDF["price"].iloc[-1]
-    url = f'[{pair}](https://cryptowat.ch/charts/KRAKEN:{tokenNormalized}-{baseNormalized}?period=1m)'
+    url = f'[{pair}](https://pro.kraken.com/app/trade/{tokenNormalized}-{baseNormalized})'
     cuartaLinea = f"\n{fromPrice} -> {toPrice} {url}"
 
     pairToNonKraken = list(wsnames.keys())[list(wsnames.values()).index(pair)]
@@ -345,7 +345,7 @@ def tradeLoop(pairsList, wsnames, pairs, eurPrices, label):
                 volume = sum(pd.to_numeric(tradeDF["volume"]))
                 volInEUR = volumeInEUR(wsnames, pair, volume, local_eurPrices)
 
-                if(volInEUR == 0 or priceDiff > 0.3 and volInEUR > 500):
+                if(volInEUR == 0 or priceDiff > 1 and volInEUR > 1000):
                     priceDiff = round(priceDiff, 3)
                     print(f"\U0001F433 [{label}]", priceDiff, pair)
                     save_signal(tradeDF, pair, volInEUR, priceDiff)
