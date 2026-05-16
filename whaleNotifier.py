@@ -246,7 +246,7 @@ def createTGmessage(tradeDF, pair, volInEUR, priceDiff, wsnames, pairs):
 
     sign = '\U0001F34F' if tradeDF["side"][0] == "b" else '\U0001F34E-'
 
-    whaleSize = int(math.log10(volInEUR/1000)+1)
+    whaleSize = max(1, int(math.log10(max(volInEUR, 1000)/1000)+1))
     whaleEmojis = "\U0001F433" * whaleSize
 
     if(priceDiff >= 5 and priceDiff < 10):
