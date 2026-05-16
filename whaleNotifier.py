@@ -36,6 +36,9 @@ else:
 # Base de datos
 DB_PATH = "/data/signals.db"
 
+# ─────────────────────────────────────────────
+# BASE DE DATOS
+# ─────────────────────────────────────────────
 def init_db():
     conn = sqlite3.connect(DB_PATH)
     conn.execute("""
@@ -53,6 +56,18 @@ def init_db():
             num_trades     INTEGER
         )
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS price_tracking (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            signal_id   INTEGER NOT NULL,
+            pair        TEXT NOT NULL,
+            timestamp   TEXT NOT NULL,
+            minutes     INTEGER NOT NULL,
+            price       REAL NOT NULL,
+            pct_change  REAL,
+            FOREIGN KEY (signal_id) REFERENCES signals(id)
+        )
+    """)
     conn.commit()
     conn.close()
     print(f"BD lista en: {DB_PATH}")
@@ -64,7 +79,7 @@ def save_signal(tradeDF, pair, volInEUR, priceDiff):
     try:
         with db_lock:
             conn = sqlite3.connect(DB_PATH)
-            conn.execute("""
+            cursor = conn.execute("""
                 INSERT INTO signals
                 (timestamp, pair, side, price_from, price_to, price_diff_pct,
                  volume_token, volume_eur, order_type, num_trades)
@@ -81,10 +96,99 @@ def save_signal(tradeDF, pair, volInEUR, priceDiff):
                 tradeDF["orderType"].iloc[0],
                 len(tradeDF)
             ))
+            signal_id = cursor.lastrowid
             conn.commit()
             conn.close()
+            return signal_id
     except Exception as e:
         print(f"Error guardando en BD: {e}")
+        return None
+
+
+# ─────────────────────────────────────────────
+# PRICE TRACKING
+# ─────────────────────────────────────────────
+def get_current_price(pair):
+    """Consulta el precio actual de un par via API REST de Kraken."""
+    try:
+        # Convertir wsname a par de API (ej: XBT/EUR -> XBTEUR)
+        pair_clean = pair.replace("/", "")
+        url = f"https://api.kraken.com/0/public/Ticker?pair={pair_clean}"
+        r = requests.get(url, timeout=10)
+        if r.status_code != 200:
+            return None
+        result = r.json().get("result", {})
+        if not result:
+            return None
+        # Kraken devuelve el par con su nombre interno, cogemos el primero
+        ticker = list(result.values())[0]
+        return float(ticker["c"][0])  # último precio
+    except Exception as e:
+        print(f"Error obteniendo precio de {pair}: {e}")
+        return None
+
+
+def track_price(signal_id, pair, entry_price):
+    """
+    Hilo que sigue el precio cada 5 minutos durante 24 horas.
+    Guarda cada lectura en price_tracking.
+    Total: 288 lecturas (24h * 60min / 5min)
+    """
+    INTERVAL_MIN = 5
+    TOTAL_MIN    = 24 * 60  # 1440 minutos = 24h
+    steps        = TOTAL_MIN // INTERVAL_MIN  # 288 pasos
+
+    print(f"📈 Tracking iniciado: {pair} (señal #{signal_id})")
+
+    for step in range(1, steps + 1):
+        time.sleep(INTERVAL_MIN * 60)  # esperar 5 minutos
+        minutes = step * INTERVAL_MIN
+
+        price = get_current_price(pair)
+        if price is None:
+            print(f"⚠️ Sin precio para {pair} en t+{minutes}min")
+            continue
+
+        pct_change = round((price - entry_price) / entry_price * 100, 4)
+
+        try:
+            with db_lock:
+                conn = sqlite3.connect(DB_PATH)
+                conn.execute("""
+                    INSERT INTO price_tracking
+                    (signal_id, pair, timestamp, minutes, price, pct_change)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                """, (
+                    signal_id,
+                    pair,
+                    datetime.now().isoformat(),
+                    minutes,
+                    price,
+                    pct_change
+                ))
+                conn.commit()
+                conn.close()
+        except Exception as e:
+            print(f"Error guardando tracking: {e}")
+
+        # Log cada hora
+        if minutes % 60 == 0:
+            print(f"📈 {pair} #{signal_id} t+{minutes}min: {price} ({pct_change:+.2f}%)")
+
+    print(f"✅ Tracking completado: {pair} (señal #{signal_id})")
+
+
+def launch_tracker(signal_id, pair, entry_price):
+    """Lanza el hilo de tracking en segundo plano."""
+    if signal_id is None:
+        return
+    t = threading.Thread(
+        target=track_price,
+        args=(signal_id, pair, entry_price),
+        daemon=True
+    )
+    t.start()
+
 
 ########################### Functions
 
@@ -200,7 +304,6 @@ def connectToWS(pairsList):
             time.sleep(i)
             i = i + 1
             continue
-    # Suscribir en grupos de 50 con 1s de pausa
     chunks = [pairsList[i:i+25] for i in range(0, len(pairsList), 25)]
     for chunk in chunks:
         msg = json.dumps({"event": "subscribe", "pair": chunk, "subscription": {"name": "trade"}})
@@ -312,7 +415,6 @@ def tradeLoop(pairsList, wsnames, pairs, eurPrices, label):
     ws = connectToWS(pairsList)
     print(f"[{label}] Subscrito y recibiendo...")
 
-    # Compartir eurPrices entre hilos de forma segura
     eurPrices_lock = threading.Lock()
     local_eurPrices = eurPrices.copy()
 
@@ -348,7 +450,14 @@ def tradeLoop(pairsList, wsnames, pairs, eurPrices, label):
                 if(volInEUR == 0 or priceDiff > 1 and volInEUR > 1000):
                     priceDiff = round(priceDiff, 3)
                     print(f"\U0001F433 [{label}]", priceDiff, pair)
-                    save_signal(tradeDF, pair, volInEUR, priceDiff)
+
+                    # Guardar señal y obtener su ID
+                    entry_price = float(tradeDF["price"].iloc[-1])
+                    signal_id = save_signal(tradeDF, pair, volInEUR, priceDiff)
+
+                    # Lanzar tracking de precio 24h en hilo separado
+                    launch_tracker(signal_id, pair, entry_price)
+
                     TGmsg = createTGmessage(tradeDF, pair, volInEUR, priceDiff, wsnames, pairs)
                     telegram_bot_sendtext(TGmsg)
                 else:
@@ -401,7 +510,10 @@ def connectTradeWS():
         daemon=True
     )
 
-    # Esperar 30s antes de arrancar USD para no saturar Kraken
+    t_eur.start()
+    print("Hilo EUR arrancado")
+
+    # Esperar 60s antes de arrancar USD para no saturar Kraken
     time.sleep(60)
 
     # Hilo USD
@@ -410,11 +522,6 @@ def connectTradeWS():
         args=(usdList, wsnames, pairs, eurPrices, "USD"),
         daemon=True
     )
-
-    t_eur.start()
-    print("Hilo EUR arrancado")
-
-    time.sleep(60)
 
     t_usd.start()
     print("Hilo USD arrancado")
