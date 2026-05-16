@@ -134,9 +134,14 @@ def getNamesForWS(pairs):
 
 
 def filterPairs(wsnames, currency):
-    # Filtra pares por moneda base (EUR o USD)
+    # Filtra pares por moneda base (EUR o USD) incluyendo USDT y GBP
     filtered = {k: v for k, v in wsnames.items()
                 if re.findall(f"/{currency}$|^{currency}/", v)}
+    # Añadir USDT y GBP solo para el hilo EUR (evitar duplicados)
+    if currency == "EUR":
+        extras = {k: v for k, v in wsnames.items()
+                  if re.findall("/USDT$|/GBP$", v) and k not in filtered}
+        filtered.update(extras)
     return(filtered)
 
 
@@ -340,7 +345,7 @@ def tradeLoop(pairsList, wsnames, pairs, eurPrices, label):
                 volume = sum(pd.to_numeric(tradeDF["volume"]))
                 volInEUR = volumeInEUR(wsnames, pair, volume, local_eurPrices)
 
-                if(volInEUR == 0 or priceDiff > 3 and volInEUR > 2000):
+                if(volInEUR == 0 or priceDiff > 0.3 and volInEUR > 500):
                     priceDiff = round(priceDiff, 3)
                     print(f"\U0001F433 [{label}]", priceDiff, pair)
                     save_signal(tradeDF, pair, volInEUR, priceDiff)
