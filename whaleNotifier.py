@@ -1,20 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Whale Notifier - Kraken WebSocket
-Detecta trades grandes ("ballenas") y los guarda en SQLite + notifica por Telegram.
-
-Setup en VPS:
-    mkdir ~/whaleNotifier && cd ~/whaleNotifier
-    python3 -m venv .venv
-    source .venv/bin/activate
-    pip install websocket-client requests pandas
-
-Variables de entorno necesarias (o editar directamente abajo):
-    export BOT_TOKEN="tu_token_de_telegram"
-    export BOT_CHAT_ID="tu_chat_id"
-    export ENV="production"   # o "dev" para desarrollo
-    export DB_PATH="/root/whaleNotifier/signals.db"   # ruta donde guardar la base de datos
+Whale notificator - Original de Juanma
+Modificaciones minimas:
+  1. Variables de entorno para token y chat ID
+  2. Almacenamiento en SQLite
+  Nada mas - toda la logica de conexion es identica al original
 """
 
 import requests
@@ -30,53 +21,41 @@ import traceback
 import sqlite3
 
 # ─────────────────────────────────────────────
-# CONFIGURACIÓN — edita aquí o usa env vars
+# CONFIGURACION
 # ─────────────────────────────────────────────
-ENV        = os.getenv("ENV", "production")
-DB_PATH    = os.getenv("DB_PATH", "/root/whaleNotifier/signals.db")
+bot_token  = os.getenv("BOT_TOKEN", "PON_AQUI_TU_TOKEN")
+bot_chatID = os.getenv("BOT_CHAT_ID", "PON_AQUI_TU_CHAT_ID")
+DB_PATH    = os.getenv("DB_PATH", "/data/signals.db")
 
-if ENV == "dev":
-    BOT_TOKEN   = os.getenv("BOT_TOKEN", "PON_AQUI_TU_TOKEN_DEV")
-    BOT_CHAT_ID = os.getenv("BOT_CHAT_ID", "PON_AQUI_TU_CHAT_ID_DEV")
-    print("🛠  Modo DESARROLLO")
-else:
-    BOT_TOKEN   = os.getenv("BOT_TOKEN", "PON_AQUI_TU_TOKEN_PRODUCCION")
-    BOT_CHAT_ID = os.getenv("BOT_CHAT_ID", "PON_AQUI_TU_CHAT_ID_PRODUCCION")
-    print("🚀 Modo PRODUCCIÓN")
-
-# Umbral mínimo en EUR para considerar una "ballena"
-WHALE_MIN_EUR   = 2000
-WHALE_MIN_DIFF  = 3      # % de diferencia de precio mínimo
-
+print(f"Bot token: {'OK' if 'PON_AQUI' not in bot_token else 'FALTA TOKEN'}")
+print(f"Chat ID:   {'OK' if 'PON_AQUI' not in bot_chatID else 'FALTA CHAT ID'}")
 
 # ─────────────────────────────────────────────
 # BASE DE DATOS
 # ─────────────────────────────────────────────
 def init_db():
-    """Crea la tabla de señales si no existe."""
     conn = sqlite3.connect(DB_PATH)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS signals (
-            id            INTEGER PRIMARY KEY AUTOINCREMENT,
-            timestamp     TEXT NOT NULL,
-            pair          TEXT NOT NULL,
-            side          TEXT NOT NULL,       -- 'b' = buy, 's' = sell
-            price_from    REAL,
-            price_to      REAL,
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp      TEXT NOT NULL,
+            pair           TEXT NOT NULL,
+            side           TEXT NOT NULL,
+            price_from     REAL,
+            price_to       REAL,
             price_diff_pct REAL,
-            volume_token  REAL,
-            volume_eur    REAL,
-            order_type    TEXT,
-            num_trades    INTEGER
+            volume_token   REAL,
+            volume_eur     REAL,
+            order_type     TEXT,
+            num_trades     INTEGER
         )
     """)
     conn.commit()
     conn.close()
-    print(f"✅ Base de datos lista en: {DB_PATH}")
+    print(f"BD lista en: {DB_PATH}")
 
 
 def save_signal(tradeDF, pair, volInEUR, priceDiff):
-    """Guarda una señal en la base de datos."""
     try:
         conn = sqlite3.connect(DB_PATH)
         conn.execute("""
@@ -99,46 +78,29 @@ def save_signal(tradeDF, pair, volInEUR, priceDiff):
         conn.commit()
         conn.close()
     except Exception as e:
-        print(f"⚠️  Error guardando señal: {e}")
+        print(f"Error guardando en BD: {e}")
 
 
-# ─────────────────────────────────────────────
-# TELEGRAM
-# ─────────────────────────────────────────────
-def telegram_bot_sendtext(bot_message):
-    url = f'https://api.telegram.org/bot{BOT_TOKEN}/sendMessage'
-    params = {
-        'chat_id'    : BOT_CHAT_ID,
-        'parse_mode' : "Markdown",
-        'text'       : bot_message
-    }
-    try:
-        response = requests.post(url, params=params, timeout=10)
-        return response.json()
-    except Exception as e:
-        print(f"⚠️  Error enviando Telegram: {e}")
+########################### Functions - ORIGINALES SIN CAMBIOS
 
-
-# ─────────────────────────────────────────────
-# KRAKEN API
-# ─────────────────────────────────────────────
 def getPairs():
-    pairsJson = requests.get("https://api.kraken.com/0/public/AssetPairs", timeout=15)
+    pairsJson = requests.get("https://api.kraken.com/0/public/AssetPairs")
     if pairsJson.status_code != 200:
-        telegram_bot_sendtext(f"{datetime.now()} | Error obteniendo pares. Código: {pairsJson.status_code}")
-        return {}
-    return pairsJson.json()['result']
+        telegram_bot_sendtext(f"{datetime.now()} | Error while getting pairs. Code: {pairsJson.status_code}")
+    pairs = pairsJson.json()['result']
+    return(pairs)
 
 
 def getEurPairs(wsnames):
-    return [ls for ls in wsnames if re.findall("/EUR$|^EUR/", ls)]
+    eurPairs = [ls for ls in wsnames if re.findall("/EUR$|^EUR/", ls)]
+    return(eurPairs)
 
 
 def cleanPairs(pairsList):
     for ch in ["'", "[", "]", "/", " "]:
-        if ch in str(pairsList):
+        if(ch in str(pairsList)):
             pairsList = str(pairsList).replace(ch, "")
-    return pairsList
+    return(pairsList)
 
 
 def getEurPrice(wsnames):
@@ -146,264 +108,264 @@ def getEurPrice(wsnames):
     eurList = getEurPairs(wsnamesValues)
     cleanEurList = cleanPairs(eurList)
     url = f'https://api.kraken.com/0/public/Ticker?pair={cleanEurList}'
-    response = requests.get(url, timeout=15)
+    response = requests.get(url)
     if response.status_code != 200:
-        telegram_bot_sendtext(f"{datetime.now()} | Error obteniendo precios EUR. Código: {response.status_code}")
-        return {}
+        telegram_bot_sendtext(f"{datetime.now()} | Error while getting EUR prices. Code: {response.status_code}")
     rawPrices = response.json()["result"]
     priceEUR = {}
     for k, v in rawPrices.items():
         if re.findall("^EUR", k):
-            priceEUR[k.replace("EUR", "") + "EUR"] = round(1 / pd.to_numeric(v["c"][0]), 4)
+            priceEUR[k.replace("EUR", "") + "EUR"] = round(1/pd.to_numeric(v["c"][0]), 4)
         elif re.findall("^ZEUR", k):
-            priceEUR[k.replace("ZEUR", "") + "ZEUR"] = round(1 / pd.to_numeric(v["c"][0]), 4)
+            priceEUR[k.replace("ZEUR", "") + "ZEUR"] = round(1/pd.to_numeric(v["c"][0]), 4)
         else:
             priceEUR[k] = pd.to_numeric(v["c"][0])
-    return priceEUR
+    return(priceEUR)
 
 
 def getNamesForWS(pairs):
-    return {key: value.get('wsname') for (key, value) in pairs.items() if value.get('wsname') is not None}
+    wsnames = {key:value.get('wsname') for (key, value) in pairs.items() if value.get('wsname') is not None}
+    return(wsnames)
 
 
-def createTradeMsg(action, wsnames):
-    messageWS = {
-        "event"        : action,
-        "pair"         : list(wsnames.values()),
-        "subscription" : {"name": "trade"}
-    }
-    return json.dumps(messageWS)
+def createTradeMsg(action, pairs, wsnames):
+    messageWS = {"event" : "", "pair" : "", "subscription" : {"name": "trade"}}
+    messageWS["event"] = action
+    messageWS["pair"] = list(wsnames.values())
+    msg = json.dumps(messageWS)
+    return(msg)
 
 
 def volumeInEUR(wsnames, pair, volume, eurPrices):
     token = pair.split("/")[0]
-    try:
-        if token == "EUR":
-            return abs(volume)
-        elif token == "ETH2.S":
-            tokenBase = "ETH/EUR"
-            pairKey = list(wsnames.keys())[list(wsnames.values()).index(tokenBase)]
-            return abs(volume * eurPrices[pairKey] * 0.96)
-        else:
-            tokenBase = token + "/EUR"
+    if (token == "EUR"):
+        volInEUR = abs(volume)
+    elif (token == "ETH2.S"):
+        tokenBase = "ETH" + "/EUR"
+        pairToNonKraken = list(wsnames.keys())[list(wsnames.values()).index(tokenBase)]
+        volInEUR = abs(volume * eurPrices[pairToNonKraken] * 0.96)
+    else:
+        tokenBase = token + "/EUR"
+        try:
+            pairToNonKraken = list(wsnames.keys())[list(wsnames.values()).index(tokenBase)]
+            volInEUR = abs(eurPrices[pairToNonKraken] * volume)
+        except:
             try:
-                pairKey = list(wsnames.keys())[list(wsnames.values()).index(tokenBase)]
-                return abs(eurPrices[pairKey] * volume)
-            except ValueError:
-                if token == "USD":
-                    return abs(1 / eurPrices["ZUSDZEUR"] * volume)
+                if(token == "USD"):
+                    volInEUR = abs(1/eurPrices["ZUSDZEUR"] * volume)
                 else:
                     tokenBase = token + "/USD"
-                    pairKey = list(wsnames.keys())[list(wsnames.values()).index(tokenBase)]
-                    return abs(eurPrices[pairKey] * volume)
-    except Exception:
-        return 0
+                    pairToNonKraken = list(wsnames.keys())[list(wsnames.values()).index(tokenBase)]
+                    volInEUR = abs(eurPrices[pairToNonKraken] * volume)
+            except:
+                try:
+                    tokenBase = token + "EUR"
+                    volInEUR = abs(eurPrices[tokenBase] * volume)
+                except:
+                    volInEUR = 0
+    return(volInEUR)
 
 
 def anotateVolume(x):
     x = pd.to_numeric(x)
-    if x <= 0:
-        return x
     zeros = int(math.log10(x))
-    if zeros >= 9:
-        return f"{round(x/1e9, 2)}B"
-    elif zeros >= 6:
-        return f"{round(x/1e6, 2)}M"
-    elif zeros >= 3:
-        return f"{round(x/1e3, 2)}K"
-    return x
+    if(zeros >= 3 and zeros < 6):
+        return("{}K".format(round(x/1e3, 2)))
+    elif(zeros >= 6 and zeros < 9):
+        return("{}M".format(round(x/1e6, 2)))
+    elif(zeros >= 9):
+        return("{}B".format(round(x/1e9, 2)))
+    else:
+        return(x)
 
 
-# ─────────────────────────────────────────────
-# WEBSOCKET
-# ─────────────────────────────────────────────
 def connectToWS(msg):
-    """Crea dos conexiones al WebSocket de Kraken (redundancia)."""
-    ws = [None, None]
-    delay = 5
-    while True:
-        try:
-            ws[0] = create_connection("wss://ws.kraken.com")
-            ws[1] = create_connection("wss://ws.kraken.com")
-            ws[0].send(msg)
-            ws[1].send(msg)
-            print("✅ Conectado al WebSocket")
-            return ws
-        except Exception as e:
-            print(f"⚠️  Error conectando WS: {e}. Reintentando en {delay}s...")
-            time.sleep(delay)
-            delay = min(delay * 2, 60)  # backoff exponencial, máximo 60s
+    ws = [ None, None ]
+    try:
+        ws[0] = create_connection("wss://ws.kraken.com")
+        ws[1] = create_connection("wss://ws.kraken.com")
+    except:
+        ws[0].close()
+        ws[1].close()
+        i = 1
+        while i < 600:
+            print("WS sleeping:", i, "s")
+            time.sleep(i)
+            i = i + 1
+            continue
+    ws[0].send(msg)
+    ws[1].send(msg)
+    return(ws)
 
 
 def receiveSafeWS(ws):
-    """Recibe datos usando conexión primaria o de respaldo."""
-    try:
-        return ws[0].recv()
-    except Exception:
+    source = 0
+    for count in range(100):
         try:
-            return ws[1].recv()
-        except Exception as e:
-            raise ConnectionError(f"Ambas conexiones WS fallaron: {e}")
+            try:
+                return(ws[0].recv())
+            except Exception:
+                traceback.print_exc()
+                source = 1
+            try:
+                return(ws[1].recv())
+            except Exception:
+                traceback.print_exc()
+                source = 0
+        except KeyboardInterrupt:
+            print("closing", source)
+            ws[0].close()
+            ws[1].close()
+            print("closed", source)
+    WSsource = "Primary" if source == 0 else "Backup"
+    print("WebSocket {}):".format(WSsource))
 
 
-# ─────────────────────────────────────────────
-# MENSAJE TELEGRAM
-# ─────────────────────────────────────────────
 def createTGmessage(tradeDF, pair, volInEUR, priceDiff, wsnames, pairs):
     pairTB = pair.replace("/", "")
-    token  = pair.split("/")[0]
-    base   = pair.split("/")[1]
+    primeraLinea = f"#{pairTB}"
 
+    token = pair.split("/")[0]
+    base = pair.split("/")[1]
+    
     tokenNormalized = "BTC" if token == "XBT" else token
-    baseNormalized  = "BTC" if base  == "XBT" else base
-
+    baseNormalized  = "BTC" if base == "XBT" else base
+    
     volumeToken = round(sum(pd.to_numeric(tradeDF["volume"])), 3)
-    volumeBase  = round(sum(pd.to_numeric(tradeDF["volume"]) * pd.to_numeric(tradeDF["price"])), 3)
-
-    sign       = '\U0001F34F' if tradeDF["side"].iloc[0] == "b" else '\U0001F34E'
-    whaleSize  = max(1, int(math.log10(max(volInEUR, 1000) / 1000) + 1))
+    volumeTokenAnnotated = anotateVolume(volumeToken)
+    
+    volumeBase = round(sum(pd.to_numeric(tradeDF["volume"]) * pd.to_numeric(tradeDF["price"])), 3)
+    volumeBase = anotateVolume(volumeBase)
+    
+    sign = '\U0001F34F' if tradeDF["side"][0] == "b" else '\U0001F34E-'
+    
+    whaleSize = int(math.log10(volInEUR/1000)+1)
     whaleEmojis = "\U0001F433" * whaleSize
-
-    if priceDiff >= 20:
-        changeEmoji = '\U0001F92F'
-    elif priceDiff >= 10:
-        changeEmoji = '\U0001F911'
-    elif priceDiff >= 5:
+    
+    if(priceDiff >= 5 and priceDiff < 10):
         changeEmoji = '\U0001F632'
+    elif(priceDiff >= 10 and priceDiff < 20):
+        changeEmoji = '\U0001F911'
+    elif(priceDiff >= 20):
+        changeEmoji = '\U0001F92F'
     else:
         changeEmoji = ""
 
-    volInEURAnnotated = anotateVolume(volInEUR)
+    volInEUR = anotateVolume(volInEUR)
+    segundaLinea = f"\n*{sign}{round(priceDiff, 2)}%* {changeEmoji} {whaleEmojis}: {volumeBase} {base} ({volumeTokenAnnotated} {token} {volInEUR}€)"
+
     firstDate = datetime.fromtimestamp(pd.to_numeric(tradeDF["time"].iloc[0])).strftime('%Y-%m-%d %H:%M:%S')
     lastDate  = datetime.fromtimestamp(pd.to_numeric(tradeDF["time"].iloc[-1])).strftime('%S')
-    url = f'[{pair}](https://www.tradingview.com/chart/?symbol=KRAKEN:{tokenNormalized}{baseNormalized})'
+    terceraLinea = f"\n{firstDate}::{lastDate}"
 
-    marginMessage = ""
-    try:
-        pairKey    = list(wsnames.keys())[list(wsnames.values()).index(pair)]
-        leverage   = {k: v.get('leverage_sell') for k, v in pairs.items() if v.get('leverage_sell') is not None}
-        pairLevs   = leverage.get(pairKey, [])
-        if pairLevs:
-            maxLev     = max(pairLevs)
-            direction  = "s" if tradeDF["side"].iloc[0] == "b" else "b"
-            size       = math.floor(volumeToken * 0.1)
-            dist       = math.floor(abs(priceDiff))
-            tol        = round(abs(dist) * 0.15, 2)
-            marginMessage = f"\n`/add {tokenNormalized} {baseNormalized} {size} {direction} {dist} {tol} {maxLev}:1`"
-    except Exception:
-        pass
+    fromPrice = tradeDF["price"].iloc[0]
+    toPrice = tradeDF["price"].iloc[-1]
+    url = f'[{pair}](https://cryptowat.ch/charts/KRAKEN:{tokenNormalized}-{baseNormalized}?period=1m)'
+    cuartaLinea = f"\n{fromPrice} -> {toPrice} {url}"
 
-    return (
-        f"#{pairTB}\n"
-        f"*{sign}{round(priceDiff, 2)}%* {changeEmoji} {whaleEmojis}: "
-        f"{anotateVolume(volumeBase)} {base} ({anotateVolume(volumeToken)} {token} | {volInEURAnnotated}€)\n"
-        f"{firstDate}::{lastDate}\n"
-        f"{tradeDF['price'].iloc[0]} → {tradeDF['price'].iloc[-1]} {url}"
-        f"{marginMessage}"
-    )
+    pairToNonKraken = list(wsnames.keys())[list(wsnames.values()).index(pair)]
+    leverage = {key:value.get('leverage_sell') for (key, value) in pairs.items() if value.get('leverage_sell') is not None}
+    pairLeverage = leverage[pairToNonKraken]
+    
+    if(pairLeverage != []):
+        maxLeverage = max(leverage[pairToNonKraken])
+        direction = "s" if tradeDF["side"][0] == "b" else "b"
+        size = math.floor(volumeToken * 0.1)
+        distanceTrade = math.floor(abs(priceDiff))
+        distanceTolerance = round(abs(distanceTrade) * 0.15, 2)
+        setmaxLeverage = f"{maxLeverage}:1"
+        marginMessage = f"\n`/add {tokenNormalized} {baseNormalized} {size} {direction} {distanceTrade} {distanceTolerance} {setmaxLeverage}`"
+    else:
+        marginMessage = ""
+    
+    quintaLinea = marginMessage
+    tgMessage = f"{primeraLinea} {segundaLinea} {terceraLinea} {cuartaLinea} {quintaLinea}"
+    return(tgMessage)
 
 
-# ─────────────────────────────────────────────
-# BUCLE PRINCIPAL  (sin recursión)
-# ─────────────────────────────────────────────
+def telegram_bot_sendtext(bot_message):
+    url = f'https://api.telegram.org/bot{bot_token}/sendMessage'
+    params = {
+            'chat_id': bot_chatID,
+            'parse_mode' : "Markdown",
+            'text' : bot_message
+            }
+    response = requests.post(url, params = params)
+    return response.json()
+
+
 def connectTradeWS():
-    init_db()
-
-    print("📡 Obteniendo pares de Kraken...")
-    pairs   = getPairs()
+    init_db()  # <- unico añadido
+    print("Getting pairs...")
+    pairs = getPairs()
+    print("Following", len(pairs) , "pairs")
+    
     wsnames = getNamesForWS(pairs)
-    print(f"📊 Siguiendo {len(wsnames)} pares")
+    msg = createTradeMsg("subscribe", pairs, wsnames)  
+    eurPrices = getEurPrice(wsnames)
 
-    eurPrices      = getEurPrice(wsnames)
-    msg            = createTradeMsg("subscribe", wsnames)
-    ws             = connectToWS(msg)
-    last_pair_check = datetime.now()
-    last_price_update = datetime.now()
-
-    telegram_bot_sendtext("🟢 Whale Notifier levantado")
-
+    print("Sending message...")
+    ws = connectToWS(msg)
+    print("Sent and Subscribed")
+    print("Receiving...")
+    telegram_bot_sendtext("\U0001F40D Levantado")
     while True:
         try:
-            # ── Actualizar precios EUR cada minuto ──
-            now = datetime.now()
-            if (now - last_price_update).seconds >= 60:
-                eurPrices = getEurPrice(wsnames)
-                last_price_update = now
-                print("💱 Precios EUR actualizados", end=" ", flush=True)
-
-            # ── Actualizar pares cada 5 minutos ──
-            if (now - last_pair_check).seconds >= 300:
-                updatedPairs   = getPairs()
+            firstReceived = receiveSafeWS(ws) 
+            result = list(json.loads(firstReceived))
+            while type(result[0]) != int:
+                firstReceived = receiveSafeWS(ws)
+                result = list(json.loads(firstReceived))
+            
+            while len(result) == 1:
+                firstReceived = receiveSafeWS(ws)
+                result = list(json.loads(firstReceived))
+            if len(result[1]) != 1:
+                tradeDF = pd.DataFrame(result[1], columns=["price", "volume", "time", "side", "orderType", "misc"])
+                tradeDF = tradeDF.sort_values(by = ["time"])
+                prices = pd.to_numeric(tradeDF["price"])
+                priceDiff = abs(float((prices.iloc[0] - prices.iloc[-1]) * 100 / prices.iloc[0]))
+                
+                pair = result[3]
+                volume = sum(pd.to_numeric(tradeDF["volume"]))
+                volInEUR = volumeInEUR(wsnames, pair, volume, eurPrices)
+                
+                if(volInEUR == 0 or priceDiff > 3 and volInEUR > 2000):
+                    priceDiff = round(priceDiff, 3)
+                    print("\U0001F433", priceDiff, pair)
+                    save_signal(tradeDF, pair, volInEUR, priceDiff)  # <- unico añadido
+                    TGmsg = createTGmessage(tradeDF, pair, volInEUR, priceDiff, wsnames, pairs)
+                    telegram_bot_sendtext(TGmsg)
+                else:
+                    print(len(tradeDF), end = " ", flush = True)
+                    
+            if(datetime.now().minute % 5 == 0 and datetime.now().second == 10):
+                time.sleep(1)
+                updatedPairs = getPairs()
                 updatedWsnames = getNamesForWS(updatedPairs)
-                last_pair_check = now
-                if len(updatedWsnames) != len(wsnames):
-                    print(f"🔄 Nuevos pares detectados ({len(wsnames)} → {len(updatedWsnames)}). Reconectando...")
-                    pairs   = updatedPairs
+                if(len(updatedWsnames) != len(wsnames)):
+                    print("New pairs. Updating...")
+                    pairs = updatedPairs
                     wsnames = updatedWsnames
-                    ws[0].close()
-                    ws[1].close()
-                    msg = createTradeMsg("subscribe", wsnames)
-                    ws  = connectToWS(msg)
-
-            # ── Recibir datos ──
-            raw    = receiveSafeWS(ws)
-            result = list(json.loads(raw))
-
-            # Ignorar mensajes de control (heartbeat, subscriptions)
-            if type(result[0]) != int:
-                continue
-            if len(result) < 2 or len(result[1]) <= 1:
-                continue
-
-            tradeDF = pd.DataFrame(result[1], columns=["price", "volume", "time", "side", "orderType", "misc"])
-            tradeDF = tradeDF.sort_values(by=["time"])
-            prices  = pd.to_numeric(tradeDF["price"])
-
-            priceDiff = abs(float((prices.iloc[0] - prices.iloc[-1]) * 100 / prices.iloc[0]))
-            pair      = result[3]
-            volume    = sum(pd.to_numeric(tradeDF["volume"]))
-            volInEUR  = volumeInEUR(wsnames, pair, volume, eurPrices)
-
-            # ── Filtro: ¿es ballena? ──
-            is_whale = (volInEUR == 0) or (priceDiff > WHALE_MIN_DIFF and volInEUR > WHALE_MIN_EUR)
-
-            if is_whale:
-                priceDiff = round(priceDiff, 3)
-                print(f"\n🐋 {pair} | {priceDiff}% | {round(volInEUR, 0)}€")
-
-                # Guardar en base de datos
-                save_signal(tradeDF, pair, volInEUR, priceDiff)
-
-                # Enviar a Telegram
-                TGmsg = createTGmessage(tradeDF, pair, volInEUR, priceDiff, wsnames, pairs)
-                telegram_bot_sendtext(TGmsg)
-            else:
-                print(".", end="", flush=True)
-
-        except ConnectionError as e:
-            print(f"\n🔴 WebSocket caído: {e}. Reconectando...")
-            telegram_bot_sendtext("🔴 CAÍDO — reconectando...")
-            time.sleep(5)
-            try:
-                ws = connectToWS(msg)
-                telegram_bot_sendtext("🟢 Reconectado")
-            except Exception:
-                time.sleep(30)
-
-        except KeyboardInterrupt:
-            print("\n⛔ Detenido por el usuario.")
-            telegram_bot_sendtext("⛔ Whale Notifier detenido manualmente.")
-            ws[0].close()
-            ws[1].close()
-            break
-
+                    msg = createTradeMsg("unsubscribe", pairs, wsnames) 
+                    ws = connectToWS(msg)
+                    print("Unsubscribed")
+                    msg = createTradeMsg("subscribe", pairs, updatedWsnames) 
+                    ws = connectToWS(msg)
+                    connectTradeWS()                    
+            
+            if(datetime.now().second == 0):
+                time.sleep(1)
+                eurPrices = getEurPrice(wsnames)
+                print("✓ ", end = "")
+                
         except Exception:
             traceback.print_exc()
-            time.sleep(1)
+            print("Disconnected. Trying...")
+            telegram_bot_sendtext("\U0001F534 CAÍDO \U0001F534")
+            time.sleep(0.1)
+            connectTradeWS()
 
 
-# ─────────────────────────────────────────────
-# ENTRADA
-# ─────────────────────────────────────────────
-if __name__ == "__main__":
-    connectTradeWS()
+# Create msg for connection
+connectTradeWS()
