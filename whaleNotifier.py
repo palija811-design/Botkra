@@ -1053,7 +1053,7 @@ def tradeLoop(pairsList, wsnames, pairs, eurPrices, label):
                 pair = result[3]
                 volume = sum(pd.to_numeric(tradeDF["volume"]))
                 volInEUR = volumeInEUR(wsnames, pair, volume, local_eurPrices)
-                if(volInEUR == 0 or priceDiff > 1 and volInEUR > 1000):
+                if(volInEUR == 0 or priceDiff > 2 and volInEUR > 15000):
                     priceDiff = round(priceDiff, 3)
                     print(f"\U0001F433 [{label}]", priceDiff, pair)
                     entry_price = float(tradeDF["price"].iloc[-1])
