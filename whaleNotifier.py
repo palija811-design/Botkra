@@ -172,161 +172,177 @@ HTML = """
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;700;800&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 <style>
-:root{--bg:#080c14;--surface:#0d1420;--border:#1a2535;--accent:#00d4ff;--green:#00ff88;--red:#ff4466;--orange:#ffaa00;--text:#c8d8e8;--muted:#4a6080}
+:root{--bg:#080c14;--surface:#0d1420;--border:#1a2535;--accent:#00d4ff;--green:#00ff88;--red:#ff4466;--orange:#ffaa00;--purple:#aa88ff;--text:#c8d8e8;--muted:#4a6080}
 *{margin:0;padding:0;box-sizing:border-box}
-body{background:var(--bg);color:var(--text);font-family:'Space Mono',monospace;min-height:100vh;background-image:radial-gradient(ellipse at 20% 20%,#001830 0%,transparent 60%),radial-gradient(ellipse at 80% 80%,#001020 0%,transparent 60%)}
-header{padding:1.2rem 2rem;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:1rem;flex-wrap:wrap}
-header h1{font-family:'Syne',sans-serif;font-size:1.5rem;font-weight:800;color:var(--accent)}
-header span{color:var(--muted);font-size:0.72rem}
-.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:0.75rem;padding:1.2rem 2rem;border-bottom:1px solid var(--border)}
-.stat{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:0.9rem}
-.stat-label{font-size:0.6rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.1em}
-.stat-value{font-size:1.4rem;font-weight:700;font-family:'Syne',sans-serif;color:var(--accent);margin-top:0.15rem}
-.tabs{display:flex;border-bottom:1px solid var(--border);padding:0 2rem;overflow-x:auto}
-.tab{padding:0.7rem 1.2rem;cursor:pointer;font-size:0.75rem;color:var(--muted);border-bottom:2px solid transparent;transition:all 0.2s;white-space:nowrap}
+body{background:var(--bg);color:var(--text);font-family:'Space Mono',monospace;min-height:100vh}
+header{padding:1rem 1.5rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.5rem}
+header h1{font-family:'Syne',sans-serif;font-size:1.4rem;font-weight:800;color:var(--accent)}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:0.6rem;padding:1rem 1.5rem;border-bottom:1px solid var(--border)}
+.stat{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:0.75rem}
+.stat-label{font-size:0.58rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em}
+.stat-value{font-size:1.3rem;font-weight:700;font-family:'Syne',sans-serif;color:var(--accent);margin-top:0.1rem}
+.tabs{display:flex;border-bottom:1px solid var(--border);padding:0 1.5rem;overflow-x:auto;gap:0}
+.tab{padding:0.65rem 1rem;cursor:pointer;font-size:0.72rem;color:var(--muted);border-bottom:2px solid transparent;white-space:nowrap;transition:all 0.2s}
 .tab.active{color:var(--accent);border-bottom-color:var(--accent)}
 .tab-content{display:none}
 .tab-content.active{display:block}
-.section-pad{padding:1.5rem 2rem}
-.section-title{font-family:'Syne',sans-serif;font-size:0.9rem;font-weight:700;color:var(--accent);margin-bottom:0.4rem}
-.section-sub{font-size:0.68rem;color:var(--muted);margin-bottom:1.2rem}
-input,select{background:var(--surface);border:1px solid var(--border);color:var(--text);padding:0.4rem 0.65rem;border-radius:6px;font-family:'Space Mono',monospace;font-size:0.75rem;outline:none}
+input,select{background:var(--surface);border:1px solid var(--border);color:var(--text);padding:0.38rem 0.6rem;border-radius:6px;font-family:'Space Mono',monospace;font-size:0.72rem;outline:none}
 input:focus,select:focus{border-color:var(--accent)}
-button{background:var(--accent);color:#000;border:none;padding:0.4rem 0.9rem;border-radius:6px;font-family:'Syne',sans-serif;font-weight:700;font-size:0.75rem;cursor:pointer;transition:opacity 0.2s}
+button{background:var(--accent);color:#000;border:none;padding:0.38rem 0.85rem;border-radius:6px;font-family:'Syne',sans-serif;font-weight:700;font-size:0.72rem;cursor:pointer;transition:opacity 0.2s}
 button:hover{opacity:0.8}
-.btn-ghost{background:transparent;border:1px solid var(--border);color:var(--muted);font-size:0.68rem}
+.btn-ghost{background:transparent;border:1px solid var(--border);color:var(--muted);font-size:0.65rem}
 .btn-ghost:hover{border-color:var(--accent);color:var(--accent);opacity:1}
 .btn-export{background:#1a3050;color:var(--accent);border:1px solid #1a4060}
 .btn-export:hover{background:var(--accent);color:#000;opacity:1}
-.controls{padding:0.9rem 2rem;display:flex;gap:0.6rem;flex-wrap:wrap;align-items:center;border-bottom:1px solid var(--border)}
+.btn-sm{background:transparent;border:1px solid var(--muted);color:var(--muted);padding:0.1rem 0.4rem;border-radius:4px;font-size:0.6rem;cursor:pointer;font-family:'Space Mono',monospace}
+.btn-sm:hover{border-color:var(--accent);color:var(--accent)}
+.controls{padding:0.75rem 1.5rem;display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;border-bottom:1px solid var(--border)}
 .table-wrap{overflow-x:auto;padding-bottom:2rem}
-table{width:100%;border-collapse:collapse;font-size:0.74rem}
-th{text-align:left;padding:0.5rem 1rem;color:var(--muted);font-size:0.6rem;text-transform:uppercase;letter-spacing:0.08em;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--bg)}
-td{padding:0.45rem 1rem;border-bottom:1px solid #0f1a28}
+table{width:100%;border-collapse:collapse;font-size:0.72rem}
+th{text-align:left;padding:0.45rem 0.9rem;color:var(--muted);font-size:0.58rem;text-transform:uppercase;letter-spacing:0.07em;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--bg)}
+td{padding:0.4rem 0.9rem;border-bottom:1px solid #0f1a28}
 tr:hover td{background:var(--surface)}
 .buy{color:var(--green);font-weight:700}
 .sell{color:var(--red);font-weight:700}
-.pair-tag{background:#0d1e30;border:1px solid #1a3050;border-radius:4px;padding:0.1rem 0.35rem;font-size:0.66rem;color:var(--accent);cursor:pointer}
+.pair-tag{background:#0d1e30;border:1px solid #1a3050;border-radius:4px;padding:0.1rem 0.32rem;font-size:0.64rem;color:var(--accent);cursor:pointer}
 .pair-tag:hover{border-color:var(--accent)}
 .pos{color:var(--green)}
 .neg{color:var(--red)}
 .neu{color:var(--orange)}
-.vol{color:#88aacc}
 .muted{color:var(--muted)}
-.btn-sm{background:transparent;border:1px solid var(--muted);color:var(--muted);padding:0.12rem 0.45rem;border-radius:4px;font-size:0.62rem;cursor:pointer;font-family:'Space Mono',monospace}
-.btn-sm:hover{border-color:var(--accent);color:var(--accent)}
-#count{color:var(--muted);font-size:0.72rem}
+.vol{color:#88aacc}
+
+/* ── RAFAGAS ── */
+.rafaga-wrap{padding:1rem 1.5rem;display:flex;flex-direction:column;gap:1rem}
+.rafaga-card{background:var(--surface);border:2px solid var(--orange);border-radius:12px;overflow:hidden;animation:pulse-border 2s infinite}
+.rafaga-card.caliente{border-color:var(--red)}
+.rafaga-card.tibia{border-color:var(--orange)}
+.rafaga-card.fria{border-color:var(--border)}
+@keyframes pulse-border{0%,100%{box-shadow:0 0 0 0 transparent}50%{box-shadow:0 0 12px 2px rgba(255,170,0,0.3)}}
+.rafaga-card.caliente{animation:pulse-border-red 2s infinite}
+@keyframes pulse-border-red{0%,100%{box-shadow:0 0 0 0 transparent}50%{box-shadow:0 0 16px 4px rgba(255,68,102,0.4)}}
+.rafaga-header{display:flex;align-items:center;gap:0.75rem;padding:0.85rem 1rem;border-bottom:1px solid var(--border);flex-wrap:wrap}
+.rafaga-pair{font-family:'Syne',sans-serif;font-size:1.1rem;font-weight:800;color:var(--accent)}
+.rafaga-badge{font-size:0.65rem;font-weight:700;padding:0.2rem 0.55rem;border-radius:20px;font-family:'Syne',sans-serif}
+.badge-hot{background:#ff446620;color:var(--red);border:1px solid var(--red)}
+.badge-warm{background:#ffaa0020;color:var(--orange);border:1px solid var(--orange)}
+.badge-cool{background:#00d4ff10;color:var(--muted);border:1px solid var(--muted)}
+.rafaga-meta{display:flex;gap:1.5rem;flex-wrap:wrap;font-size:0.68rem}
+.rafaga-meta span{color:var(--muted)}
+.rafaga-meta strong{color:var(--text)}
+.nivel-key{display:inline-block;background:#001830;border:1px solid var(--green);border-radius:4px;padding:0.15rem 0.5rem;font-size:0.7rem;color:var(--green);font-weight:700;margin-left:0.5rem}
+.nivel-key.sell{border-color:var(--red);color:var(--red)}
+.rafaga-signals{padding:0.75rem 1rem;display:flex;flex-direction:column;gap:0.4rem}
+.rafaga-signal-row{display:grid;grid-template-columns:80px 60px 90px 80px 1fr;gap:0.5rem;align-items:center;font-size:0.68rem;padding:0.3rem 0.5rem;border-radius:6px;background:#080c14}
+.rafaga-signal-row:hover{background:var(--surface)}
+.rafaga-footer{padding:0.65rem 1rem;border-top:1px solid var(--border);display:flex;gap:1rem;align-items:center;flex-wrap:wrap}
+.sugerencia{font-size:0.68rem;background:#001830;border:1px solid var(--accent);border-radius:6px;padding:0.4rem 0.75rem;color:var(--accent)}
+.tiempo-hace{font-size:0.62rem;color:var(--muted)}
+.nivel-recurrente{font-size:0.7rem;color:var(--purple);font-weight:700}
+
 /* CANDIDATOS */
-.candidates-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:1rem;padding:1.5rem 2rem}
-.candidate-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:1.2rem;cursor:pointer;transition:border-color 0.2s}
+.candidates-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:0.9rem;padding:1.2rem 1.5rem}
+.candidate-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:1rem;cursor:pointer;transition:border-color 0.2s}
 .candidate-card:hover{border-color:var(--accent)}
-.cand-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:0.9rem}
-.cand-pair{font-family:'Syne',sans-serif;font-size:1rem;font-weight:700;color:var(--accent)}
-.score-badge{font-family:'Syne',sans-serif;font-size:0.8rem;font-weight:800;padding:0.2rem 0.6rem;border-radius:20px}
+.cand-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem}
+.cand-pair{font-family:'Syne',sans-serif;font-size:0.95rem;font-weight:800;color:var(--accent)}
+.score-badge{font-family:'Syne',sans-serif;font-size:0.75rem;font-weight:800;padding:0.18rem 0.55rem;border-radius:20px}
 .score-high{background:#00ff8820;color:var(--green);border:1px solid var(--green)}
 .score-med{background:#ffaa0020;color:var(--orange);border:1px solid var(--orange)}
 .score-low{background:#ff446620;color:var(--red);border:1px solid var(--red)}
-.cand-metrics{display:grid;grid-template-columns:1fr 1fr;gap:0.5rem}
-.cand-metric{background:#0a1220;border-radius:6px;padding:0.5rem 0.7rem}
-.cand-metric-label{font-size:0.58rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em}
-.cand-metric-value{font-size:0.9rem;font-weight:700;font-family:'Syne',sans-serif;margin-top:0.1rem}
-.cand-order{margin-top:0.9rem;background:#0a1830;border:1px solid #1a3050;border-radius:6px;padding:0.6rem 0.8rem;font-size:0.68rem}
-.cand-order-label{color:var(--muted);font-size:0.58rem;text-transform:uppercase;margin-bottom:0.2rem}
-.cand-order-price{color:var(--green);font-weight:700;font-size:0.85rem}
-/* MECHAZOS */
-.mecho-row{display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr 80px;gap:0;align-items:center}
-/* MODAL */
-.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:1000;align-items:center;justify-content:center}
-.modal-overlay.open{display:flex}
-.modal{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:1.5rem;width:92%;max-width:720px;position:relative;max-height:90vh;overflow-y:auto}
-.modal h2{font-family:'Syne',sans-serif;font-size:1.1rem;color:var(--accent);margin-bottom:0.25rem}
-.modal-meta{font-size:0.68rem;color:var(--muted);margin-bottom:1rem}
-.modal-close{position:absolute;top:1rem;right:1rem;background:transparent;border:1px solid var(--border);color:var(--muted);width:28px;height:28px;border-radius:50%;cursor:pointer;font-size:1rem;display:flex;align-items:center;justify-content:center}
-.modal-close:hover{border-color:var(--red);color:var(--red);opacity:1}
-.chart-container{position:relative;height:260px;margin-bottom:1rem}
-.no-data{text-align:center;color:var(--muted);padding:2.5rem;font-size:0.78rem}
-.result-badge{display:inline-block;padding:0.18rem 0.55rem;border-radius:4px;font-size:0.68rem;font-weight:700}
-.result-pos{background:#00ff8820;color:var(--green);border:1px solid var(--green)}
-.result-neg{background:#ff446620;color:var(--red);border:1px solid var(--red)}
-/* REVERTION BARS */
-.rev-grid{display:grid;grid-template-columns:60px 1fr 50px;gap:0.4rem;align-items:center;margin-bottom:0.4rem;font-size:0.68rem}
-.rev-bar-wrap{background:#0f1a28;border-radius:4px;height:7px;overflow:hidden}
+.cand-metrics{display:grid;grid-template-columns:1fr 1fr;gap:0.4rem}
+.cand-metric{background:#0a1220;border-radius:6px;padding:0.45rem 0.6rem}
+.cand-metric-label{font-size:0.56rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.07em}
+.cand-metric-value{font-size:0.85rem;font-weight:700;font-family:'Syne',sans-serif;margin-top:0.1rem}
+
+/* POR PAR */
+.par-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:0.6rem;margin-bottom:1.2rem}
+.rev-grid{display:grid;grid-template-columns:55px 1fr 48px;gap:0.35rem;align-items:center;margin-bottom:0.35rem;font-size:0.66rem}
+.rev-bar-wrap{background:#0f1a28;border-radius:4px;height:6px;overflow:hidden}
 .rev-bar{height:100%;border-radius:4px}
+
+/* MODAL */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.9);z-index:1000;align-items:center;justify-content:center}
+.modal-overlay.open{display:flex}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:1.4rem;width:93%;max-width:700px;position:relative;max-height:90vh;overflow-y:auto}
+.modal h2{font-family:'Syne',sans-serif;font-size:1rem;color:var(--accent);margin-bottom:0.25rem}
+.modal-meta{font-size:0.66rem;color:var(--muted);margin-bottom:0.9rem}
+.modal-close{position:absolute;top:0.9rem;right:0.9rem;background:transparent;border:1px solid var(--border);color:var(--muted);width:26px;height:26px;border-radius:50%;cursor:pointer;font-size:0.95rem;display:flex;align-items:center;justify-content:center}
+.modal-close:hover{border-color:var(--red);color:var(--red);opacity:1}
+.chart-container{position:relative;height:240px;margin-bottom:0.9rem}
+.no-data{text-align:center;color:var(--muted);padding:2rem;font-size:0.75rem}
+
 /* EXPORT */
-.export-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:1rem}
-.export-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:1rem}
-.export-card p{font-size:0.68rem;color:var(--muted);margin-bottom:0.75rem;line-height:1.5}
-.pair-chips{display:flex;flex-wrap:wrap;gap:0.35rem;padding:0.75rem 2rem;border-bottom:1px solid var(--border)}
-.chip{background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:0.18rem 0.5rem;font-size:0.68rem;cursor:pointer;transition:all 0.15s}
+.export-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:0.9rem;padding:1.2rem 1.5rem}
+.export-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:0.9rem}
+.export-card p{font-size:0.65rem;color:var(--muted);margin:0.4rem 0 0.7rem;line-height:1.5}
+.sec-title{font-family:'Syne',sans-serif;font-size:0.82rem;font-weight:700;color:var(--accent);padding:1rem 1.5rem 0.5rem}
+.sec-sub{font-size:0.65rem;color:var(--muted);padding:0 1.5rem 0.75rem}
+.chip-wrap{display:flex;flex-wrap:wrap;gap:0.3rem;padding:0.6rem 1.5rem;border-bottom:1px solid var(--border)}
+.chip{background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:0.15rem 0.45rem;font-size:0.65rem;cursor:pointer;transition:all 0.15s}
 .chip:hover{border-color:var(--accent);color:var(--accent)}
-.chip .cnt{color:var(--muted);margin-left:0.25rem}
+.chip .cnt{color:var(--muted);margin-left:0.2rem}
 </style>
 </head>
 <body>
 <header>
-  <div><h1>🐋 Whale Dashboard</h1><span id="lastUpdate">Cargando...</span></div>
+  <div><h1>🐋 Whale Dashboard</h1><span id="lastUpdate" style="color:var(--muted);font-size:0.68rem">Cargando...</span></div>
   <button class="btn-ghost" onclick="loadAll()">↻ Actualizar</button>
 </header>
 <div class="stats" id="stats"></div>
-<div class="pair-chips" id="topPairs"></div>
+<div class="chip-wrap" id="topPairs"></div>
 
 <div class="tabs">
-  <div class="tab active" onclick="switchTab('candidates')">🎯 Candidatos</div>
-  <div class="tab" onclick="switchTab('mechazos')">⚡ Mechazos</div>
+  <div class="tab active" onclick="switchTab('rafagas')">🔥 Ráfagas</div>
+  <div class="tab" onclick="switchTab('candidates')">🎯 Candidatos</div>
   <div class="tab" onclick="switchTab('par')">🔍 Por par</div>
   <div class="tab" onclick="switchTab('signals')">📋 Señales</div>
   <div class="tab" onclick="switchTab('export')">📥 Exportar</div>
 </div>
 
-<!-- TAB CANDIDATOS -->
-<div class="tab-content active" id="tab-candidates">
-  <div class="section-pad">
-    <div class="section-title">🎯 Pares candidatos para cazar mechazos</div>
-    <div class="section-sub">Ordenados por score: % reversión × frecuencia × tamaño. Verde &gt;7, naranja &gt;4, rojo &lt;4. El precio de orden es el extremo medio del mecho.</div>
+<!-- TAB RÁFAGAS -->
+<div class="tab-content active" id="tab-rafagas">
+  <div class="sec-title">🔥 Ráfagas de ballena</div>
+  <div class="sec-sub">Pares con múltiples señales en poco tiempo. Rojo = activo ahora mismo. La clave es el nivel de precio repetido — ahí está la orden.</div>
+  <div class="controls">
+    <select id="rafaga-window" onchange="loadRafagas()">
+      <option value="5">Últimos 5 min</option>
+      <option value="15" selected>Últimos 15 min</option>
+      <option value="30">Últimos 30 min</option>
+      <option value="60">Última hora</option>
+      <option value="240">Últimas 4h</option>
+      <option value="1440">Últimas 24h</option>
+    </select>
+    <select id="rafaga-min" onchange="loadRafagas()">
+      <option value="2">Min 2 señales</option>
+      <option value="3" selected>Min 3 señales</option>
+      <option value="4">Min 4 señales</option>
+    </select>
+    <button onclick="loadRafagas()">Filtrar</button>
   </div>
-  <div class="candidates-grid" id="candidates-grid">
-    <div class="no-data">Cargando candidatos...</div>
+  <div class="rafaga-wrap" id="rafaga-wrap">
+    <div class="no-data">Cargando ráfagas...</div>
   </div>
 </div>
 
-<!-- TAB MECHAZOS -->
-<div class="tab-content" id="tab-mechazos">
-  <div class="section-pad" style="padding-bottom:0.5rem">
-    <div class="section-title">⚡ Mechazos recientes</div>
-    <div class="section-sub">Cada señal de ballena con su % de reversión actual. Si la columna "Rev. ahora" es alta → el precio volvió. Si es baja → el mecho sigue abierto.</div>
-  </div>
-  <div class="controls">
-    <input type="text" id="mechazo-pair" placeholder="Filtrar par" onkeyup="if(event.key==='Enter') loadMechazos()">
-    <select id="mechazo-side" onchange="loadMechazos()">
-      <option value="">Todos</option>
-      <option value="b">🍏 Compra ballena</option>
-      <option value="s">🍎 Venta ballena</option>
-    </select>
-    <button onclick="loadMechazos()">Filtrar</button>
-  </div>
-  <div class="table-wrap">
-    <table>
-      <thead><tr>
-        <th>#</th><th>Fecha</th><th>Par</th><th>Lado ballena</th>
-        <th>Diff %</th><th>Precio extremo</th><th>Vol €</th>
-        <th>Rev. 1h</th><th>Rev. 4h</th><th>Rev. 24h</th><th>Chart</th>
-      </tr></thead>
-      <tbody id="tbody-mechazos"></tbody>
-    </table>
+<!-- TAB CANDIDATOS -->
+<div class="tab-content" id="tab-candidates">
+  <div class="sec-title">🎯 Pares candidatos</div>
+  <div class="sec-sub">Score basado en % reversión × frecuencia × tamaño. Clic en una tarjeta para ver el historial completo.</div>
+  <div class="candidates-grid" id="candidates-grid">
+    <div class="no-data">Cargando...</div>
   </div>
 </div>
 
 <!-- TAB POR PAR -->
 <div class="tab-content" id="tab-par">
-  <div class="section-pad" style="padding-bottom:0">
-    <div class="section-title">🔍 Análisis por par</div>
-    <div class="section-sub">Selecciona un par para ver su historial de mechazos, % reversión por intervalo y volumen mínimo rentable.</div>
-    <div style="display:flex;gap:0.75rem;align-items:center;margin-bottom:1rem">
-      <input type="text" id="par-input" placeholder="Ej: BTC/EUR" style="width:160px">
-      <button onclick="loadPar()">Analizar</button>
-    </div>
+  <div class="sec-title">🔍 Análisis por par</div>
+  <div class="sec-sub">Historial de mechazos, % reversión por intervalo y niveles clave de precio.</div>
+  <div class="controls">
+    <input type="text" id="par-input" placeholder="Ej: ADA/GBP" style="width:140px">
+    <button onclick="loadPar()">Analizar</button>
   </div>
-  <div id="par-content" class="section-pad" style="padding-top:0"></div>
+  <div id="par-content" style="padding:1rem 1.5rem"></div>
 </div>
 
 <!-- TAB SEÑALES -->
@@ -344,11 +360,11 @@ tr:hover td{background:var(--surface)}
       <option value="500" selected>500</option>
     </select>
     <button onclick="loadSignals()">Buscar</button>
-    <span id="count"></span>
+    <span id="count" style="color:var(--muted);font-size:0.7rem"></span>
   </div>
   <div class="table-wrap">
     <table>
-      <thead><tr><th>#</th><th>Fecha</th><th>Par</th><th>Lado</th><th>Diff %</th><th>Precio entrada</th><th>Vol EUR</th><th>Trades</th><th>Chart</th></tr></thead>
+      <thead><tr><th>#</th><th>Fecha</th><th>Par</th><th>Lado</th><th>Diff %</th><th>Precio entrada</th><th>Precio extremo</th><th>Vol EUR</th><th>Chart</th></tr></thead>
       <tbody id="tbody"></tbody>
     </table>
   </div>
@@ -356,35 +372,17 @@ tr:hover td{background:var(--surface)}
 
 <!-- TAB EXPORTAR -->
 <div class="tab-content" id="tab-export">
-  <div class="section-pad">
-    <div class="section-title">📥 Exportar datos para análisis IA</div>
-    <div class="section-sub">Descarga los datos en CSV para analizar con Claude u otras herramientas.</div>
-    <div class="export-grid">
-      <div class="export-card">
-        <div class="section-title" style="font-size:0.78rem;margin-bottom:0.5rem">Todas las señales</div>
-        <p>Cada señal de ballena con par, lado, precio, volumen y timestamp. Base para cualquier análisis.</p>
-        <button class="btn-export" onclick="exportCSV('signals')">⬇ Descargar</button>
-      </div>
-      <div class="export-card">
-        <div class="section-title" style="font-size:0.78rem;margin-bottom:0.5rem">Resultados 24h</div>
-        <p>Señales con su resultado final. Para analizar qué señales fueron rentables y cuáles no.</p>
-        <button class="btn-export" onclick="exportCSV('results')">⬇ Descargar</button>
-      </div>
-      <div class="export-card">
-        <div class="section-title" style="font-size:0.78rem;margin-bottom:0.5rem">Análisis mechazos</div>
-        <p>Par, frecuencia, % reversión media a 1h/4h/24h, vol mínimo. Ideal para definir estrategia.</p>
-        <button class="btn-export" onclick="exportCSV('mechazos')">⬇ Descargar</button>
-      </div>
-      <div class="export-card">
-        <div class="section-title" style="font-size:0.78rem;margin-bottom:0.5rem">Win Rate por par</div>
-        <p>Ranking de pares por % de señales con resultado positivo a 24h.</p>
-        <button class="btn-export" onclick="exportCSV('winrate')">⬇ Descargar</button>
-      </div>
-    </div>
+  <div class="sec-title">📥 Exportar para análisis IA</div>
+  <div class="sec-sub">Descarga los datos en CSV para analizar con Claude u otras herramientas.</div>
+  <div class="export-grid">
+    <div class="export-card"><div style="color:var(--accent);font-family:'Syne',sans-serif;font-size:0.78rem;font-weight:700">Todas las señales</div><p>Cada señal con par, lado, precio, volumen y timestamp.</p><button class="btn-export" onclick="exportCSV('signals')">⬇ Descargar</button></div>
+    <div class="export-card"><div style="color:var(--accent);font-family:'Syne',sans-serif;font-size:0.78rem;font-weight:700">Ráfagas</div><p>Grupos de señales con nivel clave y sugerencia de orden.</p><button class="btn-export" onclick="exportCSV('rafagas')">⬇ Descargar</button></div>
+    <div class="export-card"><div style="color:var(--accent);font-family:'Syne',sans-serif;font-size:0.78rem;font-weight:700">Mechazos + reversión</div><p>Señales con % reversión a 1h, 4h y 24h.</p><button class="btn-export" onclick="exportCSV('mechazos')">⬇ Descargar</button></div>
+    <div class="export-card"><div style="color:var(--accent);font-family:'Syne',sans-serif;font-size:0.78rem;font-weight:700">Win Rate por par</div><p>Ranking de pares por % señales con resultado positivo.</p><button class="btn-export" onclick="exportCSV('winrate')">⬇ Descargar</button></div>
   </div>
 </div>
 
-<!-- MODAL GRÁFICA -->
+<!-- MODAL -->
 <div class="modal-overlay" id="modal">
   <div class="modal">
     <button class="modal-close" onclick="closeModal()">×</button>
@@ -407,22 +405,28 @@ function fmt(n,dec=2){
 function pct(v){
   if(v===null||v===undefined)return '<span class="muted">—</span>';
   const c=v>0?'pos':v<0?'neg':'neu';
-  return `<span class="${c}">${v>0?'+':''}${v}%</span>`;
+  return `<span class="${c}">${v>0?'+':''}${parseFloat(v).toFixed(2)}%</span>`;
 }
-function scoreClass(s){ return s>=7?'score-high':s>=4?'score-med':'score-low'; }
+function scoreClass(s){return s>=7?'score-high':s>=4?'score-med':'score-low';}
+function timeAgo(ts){
+  const diff=Math.floor((Date.now()-new Date(ts).getTime())/1000);
+  if(diff<60)return diff+'s';
+  if(diff<3600)return Math.floor(diff/60)+'min';
+  return Math.floor(diff/3600)+'h';
+}
 
 function switchTab(tab){
-  const tabs=['candidates','mechazos','par','signals','export'];
+  const tabs=['rafagas','candidates','par','signals','export'];
   document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',tabs[i]===tab));
   document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));
   document.getElementById('tab-'+tab).classList.add('active');
+  if(tab==='rafagas') loadRafagas();
   if(tab==='candidates') loadCandidates();
-  if(tab==='mechazos') loadMechazos();
   if(tab==='signals') loadSignals();
 }
 
 async function loadAll(){
-  await Promise.all([loadStats(), loadCandidates()]);
+  await Promise.all([loadStats(), loadRafagas()]);
   document.getElementById('lastUpdate').textContent='Actualizado: '+new Date().toLocaleTimeString();
 }
 
@@ -445,75 +449,83 @@ function goToPar(pair){
   loadPar();
 }
 
-async function loadCandidates(){
-  const data=await(await fetch('/api/candidates')).json();
+async function loadRafagas(){
+  const window_min = document.getElementById('rafaga-window').value;
+  const min_signals = document.getElementById('rafaga-min').value;
+  const data = await(await fetch(`/api/rafagas?window=${window_min}&min=${min_signals}`)).json();
+  const el = document.getElementById('rafaga-wrap');
   if(!data||data.length===0){
-    document.getElementById('candidates-grid').innerHTML='<div class="no-data" style="grid-column:1/-1">Necesitas señales con tracking completado (24h) para ver candidatos.<br><br>Mientras tanto, revisa la pestaña ⚡ Mechazos para ver los mechazos en tiempo real.</div>';
+    el.innerHTML='<div class="no-data">No hay ráfagas en este periodo.<br><br>Prueba ampliar la ventana de tiempo o reducir el mínimo de señales.</div>';
     return;
   }
-  document.getElementById('candidates-grid').innerHTML=data.map(d=>{
-    const sc=parseFloat(d.score);
-    const scClass=scoreClass(sc);
-    const sideLabel=d.side==='b'?'🍏 Compras ballena':'🍎 Ventas ballena';
-    const orderSide=d.side==='b'?'COMPRA límite':'VENTA límite';
-    const orderColor=d.side==='b'?'var(--green)':'var(--red)';
-    return `<div class="candidate-card" onclick="goToPar('${d.pair}')">
-      <div class="cand-header">
-        <div>
-          <div class="cand-pair">${d.pair}</div>
-          <div style="font-size:0.62rem;color:var(--muted);margin-top:0.1rem">${sideLabel}</div>
-        </div>
-        <div class="score-badge ${scClass}">Score ${sc}</div>
+  el.innerHTML = data.map(r => {
+    const minAgo = Math.floor((Date.now()-new Date(r.last_signal).getTime())/60000);
+    const isHot  = minAgo < 5;
+    const isWarm = minAgo < 30;
+    const cardClass = isHot?'caliente':isWarm?'tibia':'fria';
+    const badgeClass = isHot?'badge-hot':isWarm?'badge-warm':'badge-cool';
+    const badgeText = isHot?'🔴 AHORA':isWarm?'🟡 RECIENTE':'⚪ ANTIGUO';
+    const sideLabel = r.dominant_side==='b'?'🍏 Compras ballena':'🍎 Ventas ballena';
+    const nivelClass = r.dominant_side==='b'?'':'sell';
+    const orderSugg = r.dominant_side==='b'
+      ? `VENTA límite en ${r.nivel_clave} (si crees que revierte)`
+      : `COMPRA límite en ${r.nivel_clave} (si crees que revierte)`;
+    const rows = (r.signals||[]).map(s=>`
+      <div class="rafaga-signal-row">
+        <span class="muted">${s.timestamp.replace('T',' ').substring(11,19)}</span>
+        <span class="${s.side==='b'?'buy':'sell'}">${s.side==='b'?'🍏 BUY':'🍎 SELL'}</span>
+        <span class="neu">${s.price_diff_pct>0?'+':''}${s.price_diff_pct}%</span>
+        <span class="vol">${parseFloat(s.price_to).toPrecision(5)}</span>
+        <span class="vol">${fmt(s.volume_eur)}€</span>
+      </div>`).join('');
+    return `<div class="rafaga-card ${cardClass}">
+      <div class="rafaga-header">
+        <span class="rafaga-pair">${r.pair}</span>
+        <span class="rafaga-badge ${badgeClass}">${badgeText}</span>
+        <span class="rafaga-badge" style="background:#00d4ff10;color:var(--accent);border:1px solid var(--accent)">${r.count} señales</span>
+        <span style="font-size:0.65rem;color:var(--muted)">hace ${timeAgo(r.last_signal)}</span>
       </div>
-      <div class="cand-metrics">
-        <div class="cand-metric">
-          <div class="cand-metric-label">% Reversión media</div>
-          <div class="cand-metric-value ${d.avg_reversion>50?'pos':'neg'}">${d.avg_reversion}%</div>
-        </div>
-        <div class="cand-metric">
-          <div class="cand-metric-label">Frecuencia</div>
-          <div class="cand-metric-value" style="color:var(--accent)">${d.frequency} señales</div>
-        </div>
-        <div class="cand-metric">
-          <div class="cand-metric-label">Vol mínimo</div>
-          <div class="cand-metric-value vol">${fmt(d.min_vol)}€</div>
-        </div>
-        <div class="cand-metric">
-          <div class="cand-metric-label">Diff media señal</div>
-          <div class="cand-metric-value neu">${d.avg_diff}%</div>
-        </div>
+      <div class="rafaga-meta" style="padding:0.6rem 1rem">
+        <span>${sideLabel}</span>
+        <span>Diff media: <strong>${r.avg_diff}%</strong></span>
+        <span>Vol total: <strong class="vol">${fmt(r.total_vol)}€</strong></span>
+        <span>Duración: <strong>${r.duracion_min}min</strong></span>
+        <span>Nivel clave: <strong class="nivel-clave ${nivelClass}" style="color:${r.dominant_side==='b'?'var(--green)':'var(--red)'}">${r.nivel_clave}</strong></span>
+        ${r.nivel_recurrente?`<span>Nivel recurrente: <span class="nivel-recurrente">⭐ ${r.nivel_recurrente}</span></span>`:''}
       </div>
-      <div class="cand-order">
-        <div class="cand-order-label">💡 Orden sugerida — ${orderSide}</div>
-        <div class="cand-order-price" style="color:${orderColor}">En nivel extremo del mecho · Ver pestaña 🔍 Por par</div>
+      <div class="rafaga-signals">${rows}</div>
+      <div class="rafaga-footer">
+        <div class="sugerencia">💡 ${orderSugg}</div>
+        <button class="btn-sm" onclick="goToPar('${r.pair}')">🔍 Ver historial</button>
       </div>
     </div>`;
   }).join('');
 }
 
-async function loadMechazos(){
-  const pair=document.getElementById('mechazo-pair').value;
-  const side=document.getElementById('mechazo-side').value;
-  const data=await(await fetch(`/api/mechazos?pair=${pair}&side=${side}`)).json();
-  document.getElementById('tbody-mechazos').innerHTML=data.map(s=>{
-    const sideHtml=s.side==='b'?'<span class="buy">🍏 BUY</span>':'<span class="sell">🍎 SELL</span>';
-    const rev1=s.rev_1h!==null?pct(s.rev_1h):'<span class="muted">—</span>';
-    const rev4=s.rev_4h!==null?pct(s.rev_4h):'<span class="muted">—</span>';
-    const rev24=s.rev_24h!==null?pct(s.rev_24h):'<span class="muted">—</span>';
-    return `<tr>
-      <td class="muted">#${s.id}</td>
-      <td class="muted" style="font-size:0.68rem">${s.timestamp.replace('T',' ').substring(0,16)}</td>
-      <td><span class="pair-tag" onclick="goToPar('${s.pair}')">${s.pair}</span></td>
-      <td>${sideHtml}</td>
-      <td>${pct(s.price_diff_pct)}</td>
-      <td class="vol" style="font-size:0.7rem">${parseFloat(s.price_extremo).toPrecision(5)}</td>
-      <td class="vol">${fmt(s.volume_eur)}€</td>
-      <td>${rev1}</td>
-      <td>${rev4}</td>
-      <td>${rev24}</td>
-      <td><button class="btn-sm" onclick="openChart(${s.id},'${s.pair}','${s.side}',${s.price_extremo})">📈</button></td>
-    </tr>`;
-  }).join('')||'<tr><td colspan="11" class="no-data">No hay mechazos</td></tr>';
+async function loadCandidates(){
+  const data=await(await fetch('/api/candidates')).json();
+  if(!data||data.length===0){
+    document.getElementById('candidates-grid').innerHTML='<div class="no-data" style="grid-column:1/-1">Necesitas señales con tracking de 24h completado para ver candidatos.</div>';
+    return;
+  }
+  document.getElementById('candidates-grid').innerHTML=data.map(d=>{
+    const sc=parseFloat(d.score);
+    return `<div class="candidate-card" onclick="goToPar('${d.pair}')">
+      <div class="cand-header">
+        <div>
+          <div class="cand-pair">${d.pair}</div>
+          <div style="font-size:0.6rem;color:var(--muted);margin-top:0.1rem">${d.side==='b'?'🍏 Compras':'🍎 Ventas'} ballena</div>
+        </div>
+        <div class="score-badge ${scoreClass(sc)}">Score ${sc}</div>
+      </div>
+      <div class="cand-metrics">
+        <div class="cand-metric"><div class="cand-metric-label">% Reversión media</div><div class="cand-metric-value ${d.avg_reversion>50?'pos':'neg'}">${d.avg_reversion}%</div></div>
+        <div class="cand-metric"><div class="cand-metric-label">Frecuencia</div><div class="cand-metric-value" style="color:var(--accent)">${d.frequency}x</div></div>
+        <div class="cand-metric"><div class="cand-metric-label">Vol mínimo</div><div class="cand-metric-value vol">${fmt(d.min_vol)}€</div></div>
+        <div class="cand-metric"><div class="cand-metric-label">Diff media</div><div class="cand-metric-value neu">${d.avg_diff}%</div></div>
+      </div>
+    </div>`;
+  }).join('');
 }
 
 async function loadPar(){
@@ -521,42 +533,36 @@ async function loadPar(){
   if(!pair)return;
   const data=await(await fetch('/api/par?pair='+encodeURIComponent(pair))).json();
   const el=document.getElementById('par-content');
-  if(!data||data.total===0){
-    el.innerHTML='<div class="no-data">No hay datos para '+pair+'</div>';
-    return;
-  }
-  const rev1c=data.rev_1h_media>50?'pos':'neg';
-  const rev4c=data.rev_4h_media>50?'pos':'neg';
-  const rev24c=data.rev_24h_media>50?'pos':'neg';
+  if(!data||data.total===0){el.innerHTML='<div class="no-data">No hay datos para '+pair+'</div>';return;}
+  const r1c=data.rev_1h_media>50?'pos':'neg';
+  const r4c=data.rev_4h_media>50?'pos':'neg';
+  const r24c=data.rev_24h_media>50?'pos':'neg';
   el.innerHTML=`
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:0.75rem;margin-bottom:1.5rem">
-      <div class="cand-metric"><div class="cand-metric-label">Total mechazos</div><div class="cand-metric-value" style="color:var(--accent)">${data.total}</div></div>
-      <div class="cand-metric"><div class="cand-metric-label">Rev. media 1h</div><div class="cand-metric-value ${rev1c}">${data.rev_1h_media}%</div></div>
-      <div class="cand-metric"><div class="cand-metric-label">Rev. media 4h</div><div class="cand-metric-value ${rev4c}">${data.rev_4h_media}%</div></div>
-      <div class="cand-metric"><div class="cand-metric-label">Rev. media 24h</div><div class="cand-metric-value ${rev24c}">${data.rev_24h_media}%</div></div>
-      <div class="cand-metric"><div class="cand-metric-label">Vol mínimo señal</div><div class="cand-metric-value vol">${fmt(data.vol_min)}€</div></div>
-      <div class="cand-metric"><div class="cand-metric-label">Vol medio señal</div><div class="cand-metric-value vol">${fmt(data.vol_avg)}€</div></div>
+    <div class="par-metrics">
+      <div class="cand-metric"><div class="cand-metric-label">Total señales</div><div class="cand-metric-value" style="color:var(--accent)">${data.total}</div></div>
+      <div class="cand-metric"><div class="cand-metric-label">Rev. media 1h</div><div class="cand-metric-value ${r1c}">${data.rev_1h_media??'—'}%</div></div>
+      <div class="cand-metric"><div class="cand-metric-label">Rev. media 4h</div><div class="cand-metric-value ${r4c}">${data.rev_4h_media??'—'}%</div></div>
+      <div class="cand-metric"><div class="cand-metric-label">Rev. media 24h</div><div class="cand-metric-value ${r24c}">${data.rev_24h_media??'—'}%</div></div>
+      <div class="cand-metric"><div class="cand-metric-label">Vol mínimo</div><div class="cand-metric-value vol">${fmt(data.vol_min)}€</div></div>
+      <div class="cand-metric"><div class="cand-metric-label">Vol medio</div><div class="cand-metric-value vol">${fmt(data.vol_avg)}€</div></div>
     </div>
-    <div style="font-size:0.7rem;color:var(--muted);margin-bottom:0.75rem">REVERSIÓN POR INTERVALO (% del mecho revertido de media)</div>
-    <div style="max-width:400px;margin-bottom:1.5rem">
-      <div class="rev-grid"><span class="muted">1 hora</span><div class="rev-bar-wrap"><div class="rev-bar" style="width:${Math.min(data.rev_1h_media,100)}%;background:${data.rev_1h_media>50?'var(--green)':'var(--red)'}"></div></div><span class="${rev1c}">${data.rev_1h_media}%</span></div>
-      <div class="rev-grid"><span class="muted">4 horas</span><div class="rev-bar-wrap"><div class="rev-bar" style="width:${Math.min(data.rev_4h_media,100)}%;background:${data.rev_4h_media>50?'var(--green)':'var(--red)'}"></div></div><span class="${rev4c}">${data.rev_4h_media}%</span></div>
-      <div class="rev-grid"><span class="muted">24 horas</span><div class="rev-bar-wrap"><div class="rev-bar" style="width:${Math.min(data.rev_24h_media,100)}%;background:${data.rev_24h_media>50?'var(--green)':'var(--red)'}"></div></div><span class="${rev24c}">${data.rev_24h_media}%</span></div>
+    <div style="font-size:0.65rem;color:var(--muted);margin-bottom:0.6rem">REVERSIÓN POR INTERVALO</div>
+    <div style="max-width:380px;margin-bottom:1.2rem">
+      <div class="rev-grid"><span class="muted">1h</span><div class="rev-bar-wrap"><div class="rev-bar" style="width:${Math.min(data.rev_1h_media||0,100)}%;background:${(data.rev_1h_media||0)>50?'var(--green)':'var(--red)'}"></div></div><span class="${r1c}">${data.rev_1h_media??'—'}%</span></div>
+      <div class="rev-grid"><span class="muted">4h</span><div class="rev-bar-wrap"><div class="rev-bar" style="width:${Math.min(data.rev_4h_media||0,100)}%;background:${(data.rev_4h_media||0)>50?'var(--green)':'var(--red)'}"></div></div><span class="${r4c}">${data.rev_4h_media??'—'}%</span></div>
+      <div class="rev-grid"><span class="muted">24h</span><div class="rev-bar-wrap"><div class="rev-bar" style="width:${Math.min(data.rev_24h_media||0,100)}%;background:${(data.rev_24h_media||0)>50?'var(--green)':'var(--red)'}"></div></div><span class="${r24c}">${data.rev_24h_media??'—'}%</span></div>
     </div>
-    <div style="font-size:0.7rem;color:var(--muted);margin-bottom:0.75rem">MECHAZOS HISTÓRICOS</div>
-    <div class="table-wrap">
-    <table>
+    <div style="font-size:0.65rem;color:var(--muted);margin-bottom:0.6rem">MECHAZOS HISTÓRICOS</div>
+    <div class="table-wrap"><table>
       <thead><tr><th>#</th><th>Fecha</th><th>Lado</th><th>Diff %</th><th>Precio extremo</th><th>Vol €</th><th>Rev 1h</th><th>Rev 4h</th><th>Rev 24h</th><th>Chart</th></tr></thead>
       <tbody>${(data.signals||[]).map(s=>`<tr>
         <td class="muted">#${s.id}</td>
-        <td class="muted" style="font-size:0.68rem">${s.timestamp.replace('T',' ').substring(0,16)}</td>
+        <td class="muted" style="font-size:0.65rem">${s.timestamp.replace('T',' ').substring(0,16)}</td>
         <td>${s.side==='b'?'<span class="buy">🍏</span>':'<span class="sell">🍎</span>'}</td>
         <td>${pct(s.price_diff_pct)}</td>
         <td class="vol">${parseFloat(s.price_extremo).toPrecision(5)}</td>
         <td class="vol">${fmt(s.volume_eur)}€</td>
-        <td>${pct(s.rev_1h)}</td>
-        <td>${pct(s.rev_4h)}</td>
-        <td>${pct(s.rev_24h)}</td>
+        <td>${pct(s.rev_1h)}</td><td>${pct(s.rev_4h)}</td><td>${pct(s.rev_24h)}</td>
         <td><button class="btn-sm" onclick="openChart(${s.id},'${s.pair}','${s.side}',${s.price_extremo})">📈</button></td>
       </tr>`).join('')}</tbody>
     </table></div>`;
@@ -568,20 +574,17 @@ async function loadSignals(){
   const limit=document.getElementById('filterLimit').value;
   const data=await(await fetch(`/api/signals?pair=${pair}&side=${side}&limit=${limit}`)).json();
   document.getElementById('count').textContent=`${data.length} señales`;
-  document.getElementById('tbody').innerHTML=data.map(s=>{
-    const sideHtml=s.side==='b'?'<span class="buy">🍏 BUY</span>':'<span class="sell">🍎 SELL</span>';
-    const diff=s.price_diff_pct>=0?`<span class="pos">+${s.price_diff_pct}%</span>`:`<span class="neg">${s.price_diff_pct}%</span>`;
-    return `<tr>
-      <td class="muted">#${s.id}</td>
-      <td class="muted" style="font-size:0.68rem">${s.timestamp.replace('T',' ').substring(0,19)}</td>
-      <td><span class="pair-tag" onclick="goToPar('${s.pair}')">${s.pair}</span></td>
-      <td>${sideHtml}</td><td>${diff}</td>
-      <td class="vol" style="font-size:0.7rem">${parseFloat(s.price_to).toPrecision(5)}</td>
-      <td class="vol">${fmt(s.volume_eur)}€</td>
-      <td class="muted">${s.num_trades}</td>
-      <td><button class="btn-sm" onclick="openChart(${s.id},'${s.pair}','${s.side}',${s.price_to})">📈</button></td>
-    </tr>`;
-  }).join('')||'<tr><td colspan="9" class="no-data">No hay señales</td></tr>';
+  document.getElementById('tbody').innerHTML=data.map(s=>`<tr>
+    <td class="muted">#${s.id}</td>
+    <td class="muted" style="font-size:0.65rem">${s.timestamp.replace('T',' ').substring(0,19)}</td>
+    <td><span class="pair-tag" onclick="goToPar('${s.pair}')">${s.pair}</span></td>
+    <td>${s.side==='b'?'<span class="buy">🍏 BUY</span>':'<span class="sell">🍎 SELL</span>'}</td>
+    <td>${pct(s.price_diff_pct)}</td>
+    <td class="vol" style="font-size:0.68rem">${parseFloat(s.price_from).toPrecision(5)}</td>
+    <td class="vol" style="font-size:0.68rem">${parseFloat(s.price_to).toPrecision(5)}</td>
+    <td class="vol">${fmt(s.volume_eur)}€</td>
+    <td><button class="btn-sm" onclick="openChart(${s.id},'${s.pair}','${s.side}',${s.price_to})">📈</button></td>
+  </tr>`).join('')||'<tr><td colspan="9" class="no-data">No hay señales</td></tr>';
 }
 
 async function openChart(signalId,pair,side,entryPrice){
@@ -598,13 +601,11 @@ async function openChart(signalId,pair,side,entryPrice){
   const color=pts[pts.length-1].pct_change>=0?'#00ff88':'#ff4466';
   chartInstance=new Chart(document.getElementById('priceChart'),{type:'line',data:{labels:pts.map(p=>`+${p.minutes}min`),datasets:[{label:'Precio',data:pts.map(p=>p.price),borderColor:color,backgroundColor:color+'15',borderWidth:2,pointRadius:0,tension:0.3,fill:true,yAxisID:'y'},{label:'% cambio',data:pts.map(p=>p.pct_change),borderColor:'#00d4ff',borderWidth:1,borderDash:[4,4],pointRadius:0,tension:0.3,fill:false,yAxisID:'y2'}]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:{labels:{color:'#4a6080',font:{family:'Space Mono',size:10}}},tooltip:{backgroundColor:'#0d1420',borderColor:'#1a2535',borderWidth:1,titleColor:'#c8d8e8',bodyColor:'#c8d8e8'}},scales:{x:{ticks:{color:'#4a6080',font:{size:9},maxTicksLimit:12},grid:{color:'#0f1a28'}},y:{ticks:{color:'#00ff88',font:{size:9}},grid:{color:'#0f1a28'},position:'left'},y2:{ticks:{color:'#00d4ff',font:{size:9}},grid:{display:false},position:'right'}}}});
 }
-
 function closeModal(){document.getElementById('modal').classList.remove('open');if(chartInstance){chartInstance.destroy();chartInstance=null;}}
 document.getElementById('modal').addEventListener('click',e=>{if(e.target===document.getElementById('modal'))closeModal();});
 function exportCSV(type){window.location.href='/api/export/'+type;}
-
 loadAll();
-setInterval(loadAll,60000);
+setInterval(loadAll,30000);
 </script>
 </body>
 </html>
@@ -624,7 +625,6 @@ def db_one(query, params=[]):
     return val
 
 def get_reversion(signal_id, minutes_target):
-    """Obtiene el % de cambio más cercano al minuto objetivo."""
     conn = sqlite3.connect(DB_PATH)
     row = conn.execute("""
         SELECT pct_change FROM price_tracking
@@ -668,6 +668,110 @@ def api_tracking(signal_id):
     signal = db_get("SELECT * FROM signals WHERE id=?", [signal_id])
     return jsonify({"signal": signal[0] if signal else {}, "tracking": rows})
 
+@app.route('/api/rafagas')
+def api_rafagas():
+    from datetime import datetime, timedelta
+    window_min = int(flask_request.args.get('window', 15))
+    min_signals = int(flask_request.args.get('min', 3))
+    since = (datetime.utcnow() - timedelta(minutes=window_min)).isoformat()
+    signals = db_get("""
+        SELECT * FROM signals
+        WHERE timestamp >= ?
+        ORDER BY pair, timestamp ASC
+    """, [since])
+    if not signals:
+        return jsonify([])
+    # Agrupar por par
+    from collections import defaultdict
+    by_pair = defaultdict(list)
+    for s in signals:
+        by_pair[s['pair']].append(s)
+    result = []
+    for pair, sigs in by_pair.items():
+        if len(sigs) < min_signals:
+            continue
+        sides = [s['side'] for s in sigs]
+        dominant_side = max(set(sides), key=sides.count)
+        diffs = [s['price_diff_pct'] for s in sigs]
+        vols  = [s['volume_eur'] for s in sigs]
+        prices_to = [float(s['price_to']) for s in sigs]
+        # Nivel clave: precio extremo más repetido (redondeado a 4 decimales)
+        rounded = [round(p, 4) for p in prices_to]
+        from collections import Counter
+        cnt = Counter(rounded)
+        nivel_clave = cnt.most_common(1)[0][0]
+        nivel_recurrente = cnt.most_common(1)[0][0] if cnt.most_common(1)[0][1] > 1 else None
+        # Duracion en minutos
+        t_first = sigs[0]['timestamp']
+        t_last  = sigs[-1]['timestamp']
+        try:
+            dur = max(1, int((datetime.fromisoformat(t_last) - datetime.fromisoformat(t_first)).total_seconds() / 60))
+        except:
+            dur = 1
+        result.append({
+            'pair': pair,
+            'count': len(sigs),
+            'dominant_side': dominant_side,
+            'avg_diff': round(sum(diffs)/len(diffs), 2),
+            'total_vol': round(sum(vols), 0),
+            'nivel_clave': nivel_clave,
+            'nivel_recurrente': nivel_recurrente,
+            'duracion_min': dur,
+            'last_signal': t_last,
+            'signals': sigs
+        })
+    # Ordenar: primero más recientes
+    result.sort(key=lambda x: x['last_signal'], reverse=True)
+    return jsonify(result)
+
+@app.route('/api/candidates')
+def api_candidates():
+    import math as _math
+    pairs_data = db_get("""
+        SELECT DISTINCT s.pair, s.side
+        FROM signals s
+        JOIN price_tracking pt ON pt.signal_id=s.id
+        GROUP BY s.pair, s.side HAVING COUNT(DISTINCT s.id) >= 2
+    """)
+    result = []
+    for pd_row in pairs_data:
+        pair = pd_row['pair']; side = pd_row['side']
+        signals = db_get("SELECT * FROM signals WHERE pair=? AND side=? ORDER BY id DESC", [pair, side])
+        revs_24h=[]; vols=[]; diffs=[]
+        for s in signals:
+            r = get_reversion(s['id'], 1440)
+            if r is not None: revs_24h.append(r)
+            vols.append(s['volume_eur']); diffs.append(s['price_diff_pct'])
+        if not revs_24h: continue
+        avg_rev = round(abs(sum(revs_24h)/len(revs_24h)), 1)
+        frequency = len(signals)
+        min_vol = round(min(vols), 0)
+        avg_diff = round(sum(diffs)/len(diffs), 2)
+        avg_vol = round(sum(vols)/len(vols), 0) if vols else 0
+        # vol_factor: escala logaritmicamente. 1000€=1.0, 10K€=2.0, 100K€=3.0, 1M€=4.0
+        vol_factor = _math.log10(max(avg_vol, 100) / 1000 + 1) * 3 + 1
+        score = round(avg_rev/10 * _math.log(frequency+1) * (avg_diff/2+1) * vol_factor, 1)
+        result.append({'pair':pair,'side':side,'avg_reversion':avg_rev,'frequency':frequency,'min_vol':min_vol,'avg_vol':avg_vol,'avg_diff':avg_diff,'score':score})
+    result.sort(key=lambda x: x['score'], reverse=True)
+    return jsonify(result[:20])
+
+@app.route('/api/par')
+def api_par():
+    pair = flask_request.args.get('pair', '')
+    if not pair: return jsonify({})
+    signals = db_get("SELECT * FROM signals WHERE pair LIKE ? ORDER BY id DESC", [f"%{pair}%"])
+    if not signals: return jsonify({'total': 0})
+    vols=[s['volume_eur'] for s in signals]; diffs=[s['price_diff_pct'] for s in signals]
+    revs_1h=[]; revs_4h=[]; revs_24h=[]; enriched=[]
+    for s in signals:
+        r1=get_reversion(s['id'],60); r4=get_reversion(s['id'],240); r24=get_reversion(s['id'],1440)
+        if r1 is not None: revs_1h.append(abs(r1))
+        if r4 is not None: revs_4h.append(abs(r4))
+        if r24 is not None: revs_24h.append(abs(r24))
+        enriched.append({**s,'price_extremo':s['price_to'],'rev_1h':r1,'rev_4h':r4,'rev_24h':r24})
+    avg = lambda lst: round(sum(lst)/len(lst),1) if lst else None
+    return jsonify({'total':len(signals),'rev_1h_media':avg(revs_1h),'rev_4h_media':avg(revs_4h),'rev_24h_media':avg(revs_24h),'vol_min':round(min(vols),0),'vol_avg':round(sum(vols)/len(vols),0),'avg_diff':round(sum(diffs)/len(diffs),2),'signals':enriched[:50]})
+
 @app.route('/api/mechazos')
 def api_mechazos():
     pair = flask_request.args.get('pair', '')
@@ -680,120 +784,19 @@ def api_mechazos():
     signals = db_get(q, p)
     result = []
     for s in signals:
-        # El precio extremo es price_from para ventas de ballena, price_to para compras
-        # En una venta masiva el extremo bajo es price_to, en compra masiva el extremo alto es price_to
-        price_extremo = s['price_to']
-        rev_1h  = get_reversion(s['id'], 60)
-        rev_4h  = get_reversion(s['id'], 240)
-        rev_24h = get_reversion(s['id'], 1440)
-        result.append({**s, 'price_extremo': price_extremo, 'rev_1h': rev_1h, 'rev_4h': rev_4h, 'rev_24h': rev_24h})
+        result.append({**s,'price_extremo':s['price_to'],'rev_1h':get_reversion(s['id'],60),'rev_4h':get_reversion(s['id'],240),'rev_24h':get_reversion(s['id'],1440)})
     return jsonify(result)
-
-@app.route('/api/candidates')
-def api_candidates():
-    # Pares con suficientes señales con tracking para calcular reversión
-    pairs_data = db_get("""
-        SELECT DISTINCT s.pair, s.side
-        FROM signals s
-        JOIN price_tracking pt ON pt.signal_id=s.id
-        GROUP BY s.pair, s.side
-        HAVING COUNT(DISTINCT s.id) >= 2
-    """)
-    result = []
-    for pd_row in pairs_data:
-        pair = pd_row['pair']
-        side = pd_row['side']
-        signals = db_get("SELECT * FROM signals WHERE pair=? AND side=? ORDER BY id DESC", [pair, side])
-        revs_24h = []
-        vols = []
-        diffs = []
-        for s in signals:
-            r = get_reversion(s['id'], 1440)
-            if r is not None:
-                revs_24h.append(r)
-            vols.append(s['volume_eur'])
-            diffs.append(s['price_diff_pct'])
-        if not revs_24h:
-            continue
-        avg_rev = round(sum(revs_24h) / len(revs_24h), 1)
-        # Para cazador de mechazos: reversión positiva significa precio volvió
-        # Si ballena vende (s) y precio cae, reversión positiva = precio subió de vuelta
-        # Si ballena compra (b) y precio sube, reversión... depende del contexto
-        avg_reversion_pct = round(abs(avg_rev), 1)
-        frequency = len(signals)
-        min_vol = round(min(vols), 0) if vols else 0
-        avg_diff = round(sum(diffs)/len(diffs), 2) if diffs else 0
-        # Score: reversión × log(frecuencia) × (diff media / 2)
-        import math as _math
-        score = round(avg_reversion_pct/10 * _math.log(frequency+1) * (avg_diff/2 + 1), 1)
-        result.append({
-            'pair': pair, 'side': side,
-            'avg_reversion': avg_reversion_pct,
-            'frequency': frequency,
-            'min_vol': min_vol,
-            'avg_diff': avg_diff,
-            'score': score
-        })
-    result.sort(key=lambda x: x['score'], reverse=True)
-    return jsonify(result[:20])
-
-@app.route('/api/par')
-def api_par():
-    pair = flask_request.args.get('pair', '')
-    if not pair:
-        return jsonify({})
-    signals = db_get("SELECT * FROM signals WHERE pair LIKE ? ORDER BY id DESC", [f"%{pair}%"])
-    if not signals:
-        return jsonify({'total': 0})
-    vols = [s['volume_eur'] for s in signals]
-    diffs = [s['price_diff_pct'] for s in signals]
-    revs_1h, revs_4h, revs_24h = [], [], []
-    enriched = []
-    for s in signals:
-        r1  = get_reversion(s['id'], 60)
-        r4  = get_reversion(s['id'], 240)
-        r24 = get_reversion(s['id'], 1440)
-        if r1  is not None: revs_1h.append(abs(r1))
-        if r4  is not None: revs_4h.append(abs(r4))
-        if r24 is not None: revs_24h.append(abs(r24))
-        enriched.append({**s, 'price_extremo': s['price_to'], 'rev_1h': r1, 'rev_4h': r4, 'rev_24h': r24})
-    avg = lambda lst: round(sum(lst)/len(lst), 1) if lst else None
-    return jsonify({
-        'total': len(signals),
-        'rev_1h_media':  avg(revs_1h),
-        'rev_4h_media':  avg(revs_4h),
-        'rev_24h_media': avg(revs_24h),
-        'vol_min': round(min(vols), 0),
-        'vol_avg': round(sum(vols)/len(vols), 0),
-        'avg_diff': round(sum(diffs)/len(diffs), 2),
-        'signals': enriched[:50]
-    })
-
-@app.route('/api/results')
-def api_results():
-    return jsonify(db_get("""
-        SELECT s.id,s.pair,s.side,s.timestamp,s.price_diff_pct,s.volume_eur,
-               pt.pct_change as final_change, pt.minutes as final_minutes
-        FROM signals s
-        JOIN price_tracking pt ON pt.signal_id=s.id
-        WHERE pt.minutes=(SELECT MAX(minutes) FROM price_tracking WHERE signal_id=s.id)
-        ORDER BY s.id DESC LIMIT 200
-    """))
 
 @app.route('/api/winrate')
 def api_winrate():
-    data = db_get("""
-        SELECT s.pair, s.side,
-               COUNT(*) as total,
+    return jsonify(db_get("""
+        SELECT s.pair, s.side, COUNT(*) as total,
                SUM(CASE WHEN pt.pct_change > 0 THEN 1 ELSE 0 END) as wins,
-               ROUND(100.0 * SUM(CASE WHEN pt.pct_change > 0 THEN 1 ELSE 0 END) / COUNT(*), 1) as winrate
-        FROM signals s
-        JOIN price_tracking pt ON pt.signal_id=s.id
+               ROUND(100.0*SUM(CASE WHEN pt.pct_change > 0 THEN 1 ELSE 0 END)/COUNT(*),1) as winrate
+        FROM signals s JOIN price_tracking pt ON pt.signal_id=s.id
         WHERE pt.minutes=(SELECT MAX(minutes) FROM price_tracking WHERE signal_id=s.id)
-        GROUP BY s.pair, s.side HAVING total >= 2
-        ORDER BY winrate DESC, total DESC LIMIT 30
-    """)
-    return jsonify(data)
+        GROUP BY s.pair, s.side HAVING total >= 2 ORDER BY winrate DESC, total DESC LIMIT 30
+    """))
 
 @app.route('/api/export/<export_type>')
 def api_export(export_type):
@@ -803,26 +806,26 @@ def api_export(export_type):
         data = db_get("SELECT * FROM signals ORDER BY id DESC")
         fields = ['id','timestamp','pair','side','price_from','price_to','price_diff_pct','volume_token','volume_eur','order_type','num_trades']
         filename = 'whale_signals.csv'
-    elif export_type == 'results':
-        data = db_get("""
-            SELECT s.id,s.timestamp,s.pair,s.side,s.price_diff_pct,s.volume_eur,
-                   pt.pct_change as resultado_24h, pt.minutes as minutos_tracking
-            FROM signals s JOIN price_tracking pt ON pt.signal_id=s.id
-            WHERE pt.minutes=(SELECT MAX(minutes) FROM price_tracking WHERE signal_id=s.id)
-            ORDER BY s.id DESC
-        """)
-        fields = ['id','timestamp','pair','side','price_diff_pct','volume_eur','resultado_24h','minutos_tracking']
-        filename = 'whale_results.csv'
     elif export_type == 'mechazos':
         signals = db_get("SELECT * FROM signals ORDER BY id DESC LIMIT 500")
-        data = []
-        for s in signals:
-            r1 = get_reversion(s['id'], 60)
-            r4 = get_reversion(s['id'], 240)
-            r24 = get_reversion(s['id'], 1440)
-            data.append({**s, 'rev_1h': r1, 'rev_4h': r4, 'rev_24h': r24, 'price_extremo': s['price_to']})
+        data = [{**s,'rev_1h':get_reversion(s['id'],60),'rev_4h':get_reversion(s['id'],240),'rev_24h':get_reversion(s['id'],1440),'price_extremo':s['price_to']} for s in signals]
         fields = ['id','timestamp','pair','side','price_diff_pct','price_extremo','volume_eur','num_trades','rev_1h','rev_4h','rev_24h']
         filename = 'whale_mechazos.csv'
+    elif export_type == 'rafagas':
+        from datetime import datetime, timedelta
+        from collections import defaultdict, Counter
+        signals = db_get("SELECT * FROM signals ORDER BY pair, timestamp ASC")
+        by_pair = defaultdict(list)
+        for s in signals: by_pair[s['pair']].append(s)
+        data = []
+        for pair, sigs in by_pair.items():
+            if len(sigs) < 2: continue
+            sides = [s['side'] for s in sigs]; dom = max(set(sides), key=sides.count)
+            prices = [round(float(s['price_to']),4) for s in sigs]
+            nivel = Counter(prices).most_common(1)[0][0]
+            data.append({'pair':pair,'total_senales':len(sigs),'lado_dominante':dom,'nivel_clave':nivel,'vol_total':round(sum(s['volume_eur'] for s in sigs),0),'diff_media':round(sum(s['price_diff_pct'] for s in sigs)/len(sigs),2),'primera_senal':sigs[0]['timestamp'],'ultima_senal':sigs[-1]['timestamp']})
+        fields = ['pair','total_senales','lado_dominante','nivel_clave','vol_total','diff_media','primera_senal','ultima_senal']
+        filename = 'whale_rafagas.csv'
     elif export_type == 'winrate':
         data = db_get("""
             SELECT s.pair, s.side, COUNT(*) as total,
@@ -838,10 +841,8 @@ def api_export(export_type):
         return jsonify({'error': 'Unknown type'})
     output = io.StringIO()
     writer = csv.DictWriter(output, fieldnames=fields, extrasaction='ignore')
-    writer.writeheader()
-    writer.writerows(data)
-    return Response(output.getvalue(), mimetype='text/csv',
-                    headers={'Content-Disposition': f'attachment;filename={filename}'})
+    writer.writeheader(); writer.writerows(data)
+    return Response(output.getvalue(), mimetype='text/csv', headers={'Content-Disposition': f'attachment;filename={filename}'})
 def run_dashboard():
     import logging
     log = logging.getLogger('werkzeug')
