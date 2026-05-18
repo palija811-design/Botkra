@@ -1193,8 +1193,7 @@ def createTGmessage(tradeDF, pair, volInEUR, priceDiff, wsnames, pairs, ticker=N
         change_emoji = '📈' if ticker['change_24h'] > 0 else '📉'
         base_token = pair.split('/')[1] if '/' in pair else ''
         vol24_annotated = anotateVolume(round(max(ticker['vol_24h_base'], 1), 0))
-        quintaLinea = f"
-{change_emoji} 24h: *{ticker['change_24h']:+.2f}%* | Vol: {vol24_annotated} {base_token} | H: {ticker['high_24h']} L: {ticker['low_24h']}"
+        quintaLinea = f"\n{change_emoji} 24h: *{ticker['change_24h']:+.2f}%* | Vol: {vol24_annotated} {base_token} | H: {ticker['high_24h']} L: {ticker['low_24h']}"
     else:
         quintaLinea = ""
     return f"{primeraLinea} {segundaLinea} {terceraLinea} {cuartaLinea}{quintaLinea} {marginMessage}"
