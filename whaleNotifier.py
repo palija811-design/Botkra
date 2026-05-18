@@ -41,7 +41,9 @@ DB_PATH = os.getenv("DB_PATH", "/data/signals.db")
 # BASE DE DATOS
 # ─────────────────────────────────────────────
 def init_db():
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=15)
+    conn.execute("PRAGMA journal_mode=WAL")  # Permite lecturas concurrentes
+    conn.execute("PRAGMA synchronous=NORMAL")
     conn.execute("""
         CREATE TABLE IF NOT EXISTS signals (
             id             INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -78,7 +80,8 @@ db_lock = threading.Lock()
 def save_signal(tradeDF, pair, volInEUR, priceDiff):
     try:
         with db_lock:
-            conn = sqlite3.connect(DB_PATH)
+            conn = sqlite3.connect(DB_PATH, timeout=15)
+            conn.execute("PRAGMA journal_mode=WAL")
             cursor = conn.execute("""
                 INSERT INTO signals
                 (timestamp, pair, side, price_from, price_to, price_diff_pct,
@@ -188,7 +191,8 @@ def track_price(signal_id, pair, entry_price):
         pct_change = round((price - entry_price) / entry_price * 100, 4)
         try:
             with db_lock:
-                conn = sqlite3.connect(DB_PATH)
+                conn = sqlite3.connect(DB_PATH, timeout=15)
+                conn.execute("PRAGMA journal_mode=WAL")
                 conn.execute("""
                     INSERT INTO price_tracking
                     (signal_id, pair, timestamp, minutes, price, pct_change)
@@ -729,14 +733,16 @@ setInterval(loadAll,30000);
 """
 
 def db_get(query, params=[]):
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=10)
+    conn.execute("PRAGMA journal_mode=WAL")
     conn.row_factory = sqlite3.Row
     rows = conn.execute(query, params).fetchall()
     conn.close()
     return [dict(r) for r in rows]
 
 def db_one(query, params=[]):
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=10)
+    conn.execute("PRAGMA journal_mode=WAL")
     val = conn.execute(query, params).fetchone()[0]
     conn.close()
     return val
@@ -1093,6 +1099,7 @@ def volumeInEUR(wsnames, pair, volume, eurPrices):
 
 def anotateVolume(x):
     x = pd.to_numeric(x)
+    if x <= 0: return(0)
     zeros = int(math.log10(x))
     if(zeros >= 3 and zeros < 6): return("{}K".format(round(x/1e3, 2)))
     elif(zeros >= 6 and zeros < 9): return("{}M".format(round(x/1e6, 2)))
