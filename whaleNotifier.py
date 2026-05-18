@@ -134,8 +134,16 @@ def shorten_url(long_url):
     return long_url
 
 
+_ticker_cache = {}
+_ticker_cache_time = {}
+TICKER_CACHE_TTL = 300  # 5 minutos
+
 def get_ticker_24h(pair):
-    """Obtiene volumen 24h y cambio 24h de Kraken."""
+    """Obtiene volumen 24h y cambio 24h de Kraken. Con caché de 5 minutos."""
+    import time as _time
+    now = _time.time()
+    if pair in _ticker_cache and now - _ticker_cache_time.get(pair, 0) < TICKER_CACHE_TTL:
+        return _ticker_cache[pair]
     try:
         pair_clean = pair.replace('/', '')
         url = f'https://api.kraken.com/0/public/Ticker?pair={pair_clean}'
@@ -151,13 +159,16 @@ def get_ticker_24h(pair):
         change_24h    = round((float(t['c'][0]) - float(t['o'])) / float(t['o']) * 100, 2)
         high_24h      = float(t['h'][1])
         low_24h       = float(t['l'][1])
-        return {
+        result = {
             'vol_24h_token': vol_24h_token,
             'vol_24h_base': vol_24h_base,
             'change_24h': change_24h,
             'high_24h': high_24h,
             'low_24h': low_24h
         }
+        _ticker_cache[pair] = result
+        _ticker_cache_time[pair] = _time.time()
+        return result
     except Exception as e:
         print(f'Error ticker {pair}: {e}')
         return None
@@ -595,29 +606,25 @@ async function loadCandidates(){
       </div>
     </div>`;
   }).join('');
-  // Load 24h ticker for each candidate
-  const seen = new Set();
-  data.forEach(d => {
-    const key = d.pair.replace('/','') + '-' + d.side;
-    if(!seen.has(d.pair)){ seen.add(d.pair); loadCandTicker(d.pair, d.side); }
-  });
-}
-
-async function loadCandTicker(pair, side){
+  // Una sola llamada batch para todos los pares
+  const uniquePairs = [...new Set(data.map(d=>d.pair))].join(',');
   try {
-    const t = await(await fetch('/api/ticker24h?pair='+encodeURIComponent(pair))).json();
-    if(!t||t.error) return;
-    const key = pair.replace('/','') + '-' + side;
-    const chEl = document.getElementById('cch24-'+key);
-    const volEl = document.getElementById('cvol24-'+key);
-    if(chEl){
-      const cc = t.change_24h>0?'pos':t.change_24h<0?'neg':'neu';
-      chEl.innerHTML = `<div class="cand-metric-label">Cambio 24h</div><div class="cand-metric-value ${cc}">${t.change_24h>0?'+':''}${t.change_24h}%</div>`;
-    }
-    if(volEl){
-      volEl.innerHTML = `<div class="cand-metric-label">Vol 24h</div><div class="cand-metric-value vol">${fmt(t.vol_24h_base)}</div>`;
-    }
-  } catch(e){}
+    const tickers = await(await fetch('/api/ticker_batch?pairs='+encodeURIComponent(uniquePairs))).json();
+    data.forEach(d => {
+      const key = d.pair.replace('/','') + '-' + d.side;
+      const t = tickers[d.pair];
+      if(!t) return;
+      const chEl = document.getElementById('cch24-'+key);
+      const volEl = document.getElementById('cvol24-'+key);
+      if(chEl){
+        const cc = t.change_24h>0?'pos':t.change_24h<0?'neg':'neu';
+        chEl.innerHTML = `<div class="cand-metric-label">Cambio 24h</div><div class="cand-metric-value ${cc}">${t.change_24h>0?'+':''}${t.change_24h}%</div>`;
+      }
+      if(volEl){
+        volEl.innerHTML = `<div class="cand-metric-label">Vol 24h</div><div class="cand-metric-value vol">${fmt(t.vol_24h_base)}</div>`;
+      }
+    });
+  } catch(e){ console.log('batch ticker err',e); }
 }
 
 async function loadPar(){
@@ -856,7 +863,7 @@ def api_candidates():
         score = round(avg_rev/10 * _math.log(frequency+1) * (avg_diff/2+1) * vol_factor, 1)
         result.append({'pair':pair,'side':side,'avg_reversion':avg_rev,'frequency':frequency,'min_vol':min_vol,'avg_vol':avg_vol,'avg_diff':avg_diff,'score':score})
     result.sort(key=lambda x: x['score'], reverse=True)
-    return jsonify(result[:20])
+    return jsonify(result[:8])
 
 @app.route('/api/par')
 def api_par():
@@ -900,6 +907,21 @@ def api_winrate():
         WHERE pt.minutes=(SELECT MAX(minutes) FROM price_tracking WHERE signal_id=s.id)
         GROUP BY s.pair, s.side HAVING total >= 2 ORDER BY winrate DESC, total DESC LIMIT 30
     """))
+
+@app.route('/api/ticker_batch')
+def api_ticker_batch():
+    pairs = flask_request.args.get('pairs', '')
+    if not pairs:
+        return jsonify({})
+    result = {}
+    for pair in pairs.split(','):
+        pair = pair.strip()
+        if pair:
+            data = get_ticker_24h(pair)
+            if data:
+                result[pair] = data
+    return jsonify(result)
+
 
 @app.route('/api/ticker24h')
 def api_ticker24h():
