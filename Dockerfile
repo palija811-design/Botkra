@@ -1,7 +1,7 @@
 # ─────────────────────────────────────────
 # Dockerfile para Easypanel
 # ─────────────────────────────────────────
-# rebuild-20260518
+# rebuild-202605188
 FROM python:3.11-slim
 
 WORKDIR /app
