@@ -572,7 +572,14 @@ async function loadRafagas(){
 }
 
 async function loadCandidates(){
-  const data=await(await fetch('/api/candidates')).json();
+  let data;
+  try {
+    const r = await fetch('/api/candidates');
+    data = await r.json();
+  } catch(e) {
+    document.getElementById('candidates-grid').innerHTML='<div class="no-data" style="grid-column:1/-1">Error cargando candidatos. Reintenta en unos segundos.</div>';
+    return;
+  }
   if(!data||data.length===0){
     document.getElementById('candidates-grid').innerHTML='<div class="no-data" style="grid-column:1/-1">Necesitas señales con tracking de 24h completado para ver candidatos.<br><br>Mientras tanto revisa 🔥 Ráfagas para ver movimientos en tiempo real.</div>';
     return;
@@ -837,31 +844,44 @@ def api_rafagas():
 @app.route('/api/candidates')
 def api_candidates():
     import math as _math
-    pairs_data = db_get("""
-        SELECT DISTINCT s.pair, s.side
+    # Una sola query eficiente — sin loops de queries individuales
+    data = db_get("""
+        SELECT
+            s.pair,
+            s.side,
+            COUNT(DISTINCT s.id)                          AS frequency,
+            ROUND(AVG(ABS(pt.pct_change)), 1)             AS avg_reversion,
+            ROUND(MIN(s.volume_eur), 0)                   AS min_vol,
+            ROUND(AVG(s.volume_eur), 0)                   AS avg_vol,
+            ROUND(AVG(s.price_diff_pct), 2)               AS avg_diff
         FROM signals s
-        JOIN price_tracking pt ON pt.signal_id=s.id
-        GROUP BY s.pair, s.side HAVING COUNT(DISTINCT s.id) >= 2
+        JOIN price_tracking pt ON pt.signal_id = s.id
+        WHERE pt.minutes = (
+            SELECT MAX(minutes) FROM price_tracking WHERE signal_id = s.id
+        )
+        GROUP BY s.pair, s.side
+        HAVING frequency >= 2
+        ORDER BY avg_reversion DESC
+        LIMIT 30
     """)
     result = []
-    for pd_row in pairs_data:
-        pair = pd_row['pair']; side = pd_row['side']
-        signals = db_get("SELECT * FROM signals WHERE pair=? AND side=? ORDER BY id DESC", [pair, side])
-        revs_24h=[]; vols=[]; diffs=[]
-        for s in signals:
-            r = get_reversion(s['id'], 1440)
-            if r is not None: revs_24h.append(r)
-            vols.append(s['volume_eur']); diffs.append(s['price_diff_pct'])
-        if not revs_24h: continue
-        avg_rev = round(abs(sum(revs_24h)/len(revs_24h)), 1)
-        frequency = len(signals)
-        min_vol = round(min(vols), 0)
-        avg_diff = round(sum(diffs)/len(diffs), 2)
-        avg_vol = round(sum(vols)/len(vols), 0) if vols else 0
-        # vol_factor: escala logaritmicamente. 1000€=1.0, 10K€=2.0, 100K€=3.0, 1M€=4.0
+    for row in data:
+        avg_rev   = row['avg_reversion'] or 0
+        avg_vol   = row['avg_vol'] or 100
+        avg_diff  = row['avg_diff'] or 0
+        frequency = row['frequency'] or 1
         vol_factor = _math.log10(max(avg_vol, 100) / 1000 + 1) * 3 + 1
         score = round(avg_rev/10 * _math.log(frequency+1) * (avg_diff/2+1) * vol_factor, 1)
-        result.append({'pair':pair,'side':side,'avg_reversion':avg_rev,'frequency':frequency,'min_vol':min_vol,'avg_vol':avg_vol,'avg_diff':avg_diff,'score':score})
+        result.append({
+            'pair':         row['pair'],
+            'side':         row['side'],
+            'avg_reversion': avg_rev,
+            'frequency':    frequency,
+            'min_vol':      row['min_vol'],
+            'avg_vol':      avg_vol,
+            'avg_diff':     avg_diff,
+            'score':        score
+        })
     result.sort(key=lambda x: x['score'], reverse=True)
     return jsonify(result[:8])
 
