@@ -123,6 +123,46 @@ def get_current_price(pair):
         print(f"Error obteniendo precio de {pair}: {e}")
         return None
 
+def shorten_url(long_url):
+    """Acorta una URL usando TinyURL API."""
+    try:
+        r = requests.get(f'https://tinyurl.com/api-create.php?url={long_url}', timeout=5)
+        if r.status_code == 200 and r.text.startswith('http'):
+            return r.text.strip()
+    except Exception:
+        pass
+    return long_url
+
+
+def get_ticker_24h(pair):
+    """Obtiene volumen 24h y cambio 24h de Kraken."""
+    try:
+        pair_clean = pair.replace('/', '')
+        url = f'https://api.kraken.com/0/public/Ticker?pair={pair_clean}'
+        r = requests.get(url, timeout=8)
+        if r.status_code != 200:
+            return None
+        result = r.json().get('result', {})
+        if not result:
+            return None
+        t = list(result.values())[0]
+        vol_24h_token = float(t['v'][1])   # volumen 24h en tokens
+        vol_24h_base  = float(t['v'][1]) * float(t['p'][1])  # volumen 24h en moneda base
+        change_24h    = round((float(t['c'][0]) - float(t['o'])) / float(t['o']) * 100, 2)
+        high_24h      = float(t['h'][1])
+        low_24h       = float(t['l'][1])
+        return {
+            'vol_24h_token': vol_24h_token,
+            'vol_24h_base': vol_24h_base,
+            'change_24h': change_24h,
+            'high_24h': high_24h,
+            'low_24h': low_24h
+        }
+    except Exception as e:
+        print(f'Error ticker {pair}: {e}')
+        return None
+
+
 def track_price(signal_id, pair, entry_price):
     INTERVAL_MIN = 5
     TOTAL_MIN    = 24 * 60
@@ -364,7 +404,7 @@ tr:hover td{background:var(--surface)}
   </div>
   <div class="table-wrap">
     <table>
-      <thead><tr><th>#</th><th>Fecha</th><th>Par</th><th>Lado</th><th>Diff %</th><th>Precio entrada</th><th>Precio extremo</th><th>Vol EUR</th><th>Chart</th></tr></thead>
+      <thead><tr><th>#</th><th>Fecha</th><th>Par</th><th>Lado</th><th>Diff %</th><th>Precio entrada</th><th>Precio extremo</th><th>Vol señal €</th><th>Cambio 24h</th><th>Vol 24h</th><th>Chart</th></tr></thead>
       <tbody id="tbody"></tbody>
     </table>
   </div>
@@ -423,6 +463,23 @@ function switchTab(tab){
   if(tab==='rafagas') loadRafagas();
   if(tab==='candidates') loadCandidates();
   if(tab==='signals') loadSignals();
+}
+
+async function loadTicker24h(pair, signals){
+  try {
+    const r = await fetch('/api/ticker24h?pair='+encodeURIComponent(pair));
+    const t = await r.json();
+    if(!t||t.error) return;
+    const changeClass = t.change_24h > 0 ? 'pos' : t.change_24h < 0 ? 'neg' : 'neu';
+    const changeText = (t.change_24h > 0 ? '+' : '') + t.change_24h + '%';
+    const volText = fmt(t.vol_24h_base);
+    signals.filter(s=>s.pair===pair).forEach(s=>{
+      const chEl = document.getElementById('ch24-'+s.id);
+      const volEl = document.getElementById('vol24-'+s.id);
+      if(chEl) chEl.innerHTML = '<span class="'+changeClass+'">' + changeText + '</span>';
+      if(volEl) volEl.innerHTML = '<span class="vol">' + volText + '</span>';
+    });
+  } catch(e) { console.log('ticker err', e); }
 }
 
 async function loadAll(){
@@ -583,8 +640,13 @@ async function loadSignals(){
     <td class="vol" style="font-size:0.68rem">${parseFloat(s.price_from).toPrecision(5)}</td>
     <td class="vol" style="font-size:0.68rem">${parseFloat(s.price_to).toPrecision(5)}</td>
     <td class="vol">${fmt(s.volume_eur)}€</td>
+    <td id="ch24-${s.id}" class="muted">...</td>
+    <td id="vol24-${s.id}" class="muted">...</td>
     <td><button class="btn-sm" onclick="openChart(${s.id},'${s.pair}','${s.side}',${s.price_to})">📈</button></td>
-  </tr>`).join('')||'<tr><td colspan="9" class="no-data">No hay señales</td></tr>';
+  </tr>`).join('')
+  // Load 24h ticker for visible pairs
+  const seen = new Set();
+  data.forEach(s => { if(!seen.has(s.pair)){ seen.add(s.pair); loadTicker24h(s.pair, data); } });||'<tr><td colspan="9" class="no-data">No hay señales</td></tr>';
 }
 
 async function openChart(signalId,pair,side,entryPrice){
@@ -798,6 +860,17 @@ def api_winrate():
         GROUP BY s.pair, s.side HAVING total >= 2 ORDER BY winrate DESC, total DESC LIMIT 30
     """))
 
+@app.route('/api/ticker24h')
+def api_ticker24h():
+    pair = flask_request.args.get('pair', '')
+    if not pair:
+        return jsonify({'error': 'no pair'})
+    data = get_ticker_24h(pair)
+    if not data:
+        return jsonify({'error': 'no data'})
+    return jsonify(data)
+
+
 @app.route('/api/export/<export_type>')
 def api_export(export_type):
     from flask import Response
@@ -977,7 +1050,7 @@ def receiveSafeWS(ws):
     WSsource = "Primary" if source == 0 else "Backup"
     print("WebSocket {}):".format(WSsource))
 
-def createTGmessage(tradeDF, pair, volInEUR, priceDiff, wsnames, pairs):
+def createTGmessage(tradeDF, pair, volInEUR, priceDiff, wsnames, pairs, ticker=None):
     pairTB = pair.replace("/", "")
     primeraLinea = f"#{pairTB}"
     token = pair.split("/")[0]
@@ -1017,7 +1090,7 @@ def createTGmessage(tradeDF, pair, volInEUR, priceDiff, wsnames, pairs):
         marginMessage = f"\n`/add {tokenNormalized} {baseNormalized} {size} {direction} {distanceTrade} {distanceTolerance} {setmaxLeverage}`"
     else:
         marginMessage = ""
-    return f"{primeraLinea} {segundaLinea} {terceraLinea} {cuartaLinea} {marginMessage}"
+    return f"{primeraLinea} {segundaLinea} {terceraLinea} {cuartaLinea}{quintaLinea} {marginMessage}"
 
 def telegram_bot_sendtext(bot_message):
     url = f'https://api.telegram.org/bot{bot_token}/sendMessage'
@@ -1059,7 +1132,8 @@ def tradeLoop(pairsList, wsnames, pairs, eurPrices, label):
                     entry_price = float(tradeDF["price"].iloc[-1])
                     signal_id = save_signal(tradeDF, pair, volInEUR, priceDiff)
                     launch_tracker(signal_id, pair, entry_price)
-                    TGmsg = createTGmessage(tradeDF, pair, volInEUR, priceDiff, wsnames, pairs)
+                    ticker = get_ticker_24h(pair)
+                    TGmsg = createTGmessage(tradeDF, pair, volInEUR, priceDiff, wsnames, pairs, ticker)
                     telegram_bot_sendtext(TGmsg)
                 else:
                     print(".", end="", flush=True)
