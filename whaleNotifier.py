@@ -333,15 +333,15 @@ tr:hover td{background:var(--surface)}
 <div class="chip-wrap" id="topPairs"></div>
 
 <div class="tabs">
-  <div class="tab active" onclick="switchTab('rafagas')">🔥 Ráfagas</div>
-  <div class="tab" onclick="switchTab('candidates')">🎯 Candidatos</div>
+  <div class="tab active" onclick="switchTab('candidates')">🎯 Candidatos</div>
+  <div class="tab" onclick="switchTab('rafagas')">🔥 Ráfagas</div>
   <div class="tab" onclick="switchTab('par')">🔍 Por par</div>
   <div class="tab" onclick="switchTab('signals')">📋 Señales</div>
   <div class="tab" onclick="switchTab('export')">📥 Exportar</div>
 </div>
 
 <!-- TAB RÁFAGAS -->
-<div class="tab-content active" id="tab-rafagas">
+<div class="tab-content" id="tab-rafagas">
   <div class="sec-title">🔥 Ráfagas de ballena</div>
   <div class="sec-sub">Pares con múltiples señales en poco tiempo. Rojo = activo ahora mismo. La clave es el nivel de precio repetido — ahí está la orden.</div>
   <div class="controls">
@@ -366,7 +366,7 @@ tr:hover td{background:var(--surface)}
 </div>
 
 <!-- TAB CANDIDATOS -->
-<div class="tab-content" id="tab-candidates">
+<div class="tab-content active" id="tab-candidates">
   <div class="sec-title">🎯 Pares candidatos</div>
   <div class="sec-sub">Score basado en % reversión × frecuencia × tamaño. Clic en una tarjeta para ver el historial completo.</div>
   <div class="candidates-grid" id="candidates-grid">
@@ -456,7 +456,7 @@ function timeAgo(ts){
 }
 
 function switchTab(tab){
-  const tabs=['rafagas','candidates','par','signals','export'];
+  const tabs=['candidates','rafagas','par','signals','export'];
   document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',tabs[i]===tab));
   document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));
   document.getElementById('tab-'+tab).classList.add('active');
@@ -483,7 +483,7 @@ async function loadTicker24h(pair, signals){
 }
 
 async function loadAll(){
-  await Promise.all([loadStats(), loadRafagas()]);
+  await Promise.all([loadStats(), loadCandidates()]);
   document.getElementById('lastUpdate').textContent='Actualizado: '+new Date().toLocaleTimeString();
 }
 
@@ -563,27 +563,61 @@ async function loadRafagas(){
 async function loadCandidates(){
   const data=await(await fetch('/api/candidates')).json();
   if(!data||data.length===0){
-    document.getElementById('candidates-grid').innerHTML='<div class="no-data" style="grid-column:1/-1">Necesitas señales con tracking de 24h completado para ver candidatos.</div>';
+    document.getElementById('candidates-grid').innerHTML='<div class="no-data" style="grid-column:1/-1">Necesitas señales con tracking de 24h completado para ver candidatos.<br><br>Mientras tanto revisa 🔥 Ráfagas para ver movimientos en tiempo real.</div>';
     return;
   }
   document.getElementById('candidates-grid').innerHTML=data.map(d=>{
     const sc=parseFloat(d.score);
-    return `<div class="candidate-card" onclick="goToPar('${d.pair}')">
+    const tokenNorm = d.pair.split('/')[0]==='XBT'?'BTC':d.pair.split('/')[0];
+    const baseNorm  = d.pair.split('/')[1]==='XBT'?'BTC':d.pair.split('/')[1];
+    const krakenUrl = `https://pro.kraken.com/app/trade/${tokenNorm}-${baseNorm}`;
+    return `<div class="candidate-card">
       <div class="cand-header">
         <div>
-          <div class="cand-pair">${d.pair}</div>
-          <div style="font-size:0.6rem;color:var(--muted);margin-top:0.1rem">${d.side==='b'?'🍏 Compras':'🍎 Ventas'} ballena</div>
+          <div style="display:flex;align-items:center;gap:0.5rem">
+            <div class="cand-pair" onclick="goToPar('${d.pair}')" style="cursor:pointer">${d.pair}</div>
+            <a href="${krakenUrl}" target="_blank" style="font-size:0.65rem;color:var(--muted);text-decoration:none;border:1px solid var(--muted);border-radius:4px;padding:0.1rem 0.35rem" title="Ver en Kraken Pro">📊 K</a>
+          </div>
+          <div style="font-size:0.6rem;color:var(--muted);margin-top:0.15rem">${d.side==='b'?'🍏 Compras':'🍎 Ventas'} ballena</div>
         </div>
         <div class="score-badge ${scoreClass(sc)}">Score ${sc}</div>
       </div>
       <div class="cand-metrics">
         <div class="cand-metric"><div class="cand-metric-label">% Reversión media</div><div class="cand-metric-value ${d.avg_reversion>50?'pos':'neg'}">${d.avg_reversion}%</div></div>
         <div class="cand-metric"><div class="cand-metric-label">Frecuencia</div><div class="cand-metric-value" style="color:var(--accent)">${d.frequency}x</div></div>
-        <div class="cand-metric"><div class="cand-metric-label">Vol mínimo</div><div class="cand-metric-value vol">${fmt(d.min_vol)}€</div></div>
-        <div class="cand-metric"><div class="cand-metric-label">Diff media</div><div class="cand-metric-value neu">${d.avg_diff}%</div></div>
+        <div class="cand-metric"><div class="cand-metric-label">Vol señal medio</div><div class="cand-metric-value vol">${fmt(d.avg_vol)}€</div></div>
+        <div class="cand-metric"><div class="cand-metric-label">Diff media señal</div><div class="cand-metric-value neu">${d.avg_diff}%</div></div>
+        <div class="cand-metric" id="cch24-${d.pair.replace('/','')}-${d.side}"><div class="cand-metric-label">Cambio 24h</div><div class="cand-metric-value muted" style="font-size:0.75rem">...</div></div>
+        <div class="cand-metric" id="cvol24-${d.pair.replace('/','')}-${d.side}"><div class="cand-metric-label">Vol 24h</div><div class="cand-metric-value muted" style="font-size:0.75rem">...</div></div>
+      </div>
+      <div style="margin-top:0.75rem">
+        <a href="${krakenUrl}" target="_blank" style="display:block;width:100%;text-align:center;background:#0a1830;border:1px solid #1a4060;border-radius:6px;padding:0.4rem;font-size:0.68rem;color:var(--accent);text-decoration:none">📊 Ver gráfico en Kraken Pro →</a>
       </div>
     </div>`;
   }).join('');
+  // Load 24h ticker for each candidate
+  const seen = new Set();
+  data.forEach(d => {
+    const key = d.pair.replace('/','') + '-' + d.side;
+    if(!seen.has(d.pair)){ seen.add(d.pair); loadCandTicker(d.pair, d.side); }
+  });
+}
+
+async function loadCandTicker(pair, side){
+  try {
+    const t = await(await fetch('/api/ticker24h?pair='+encodeURIComponent(pair))).json();
+    if(!t||t.error) return;
+    const key = pair.replace('/','') + '-' + side;
+    const chEl = document.getElementById('cch24-'+key);
+    const volEl = document.getElementById('cvol24-'+key);
+    if(chEl){
+      const cc = t.change_24h>0?'pos':t.change_24h<0?'neg':'neu';
+      chEl.innerHTML = `<div class="cand-metric-label">Cambio 24h</div><div class="cand-metric-value ${cc}">${t.change_24h>0?'+':''}${t.change_24h}%</div>`;
+    }
+    if(volEl){
+      volEl.innerHTML = `<div class="cand-metric-label">Vol 24h</div><div class="cand-metric-value vol">${fmt(t.vol_24h_base)}</div>`;
+    }
+  } catch(e){}
 }
 
 async function loadPar(){
