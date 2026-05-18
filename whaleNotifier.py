@@ -554,6 +554,7 @@ async function loadRafagas(){
       <div class="rafaga-footer">
         <div class="sugerencia">💡 ${orderSugg}</div>
         <button class="btn-sm" onclick="goToPar('${r.pair}')">🔍 Ver historial</button>
+        <a href="https://pro.kraken.com/app/trade/${r.pair.replace('/','-')}" target="_blank" class="btn-sm" style="text-decoration:none;display:inline-block">📊 Kraken</a>
       </div>
     </div>`;
   }).join('');
@@ -634,19 +635,25 @@ async function loadSignals(){
   document.getElementById('tbody').innerHTML=data.map(s=>`<tr>
     <td class="muted">#${s.id}</td>
     <td class="muted" style="font-size:0.65rem">${s.timestamp.replace('T',' ').substring(0,19)}</td>
-    <td><span class="pair-tag" onclick="goToPar('${s.pair}')">${s.pair}</span></td>
+    <td>
+      <span class="pair-tag" onclick="goToPar('${s.pair}')">${s.pair}</span>
+      <a href="https://pro.kraken.com/app/trade/${s.pair.replace('/','-')}" target="_blank" style="font-size:0.6rem;color:var(--muted);margin-left:0.3rem;text-decoration:none" title="Ver en Kraken Pro">↗</a>
+    </td>
     <td>${s.side==='b'?'<span class="buy">🍏 BUY</span>':'<span class="sell">🍎 SELL</span>'}</td>
     <td>${pct(s.price_diff_pct)}</td>
     <td class="vol" style="font-size:0.68rem">${parseFloat(s.price_from).toPrecision(5)}</td>
     <td class="vol" style="font-size:0.68rem">${parseFloat(s.price_to).toPrecision(5)}</td>
     <td class="vol">${fmt(s.volume_eur)}€</td>
-    <td id="ch24-${s.id}" class="muted">...</td>
-    <td id="vol24-${s.id}" class="muted">...</td>
-    <td><button class="btn-sm" onclick="openChart(${s.id},'${s.pair}','${s.side}',${s.price_to})">📈</button></td>
-  </tr>`).join('')
-  // Load 24h ticker for visible pairs
+    <td id="ch24-${s.id}" class="muted" style="font-size:0.7rem">...</td>
+    <td id="vol24-${s.id}" class="muted" style="font-size:0.7rem">...</td>
+    <td>
+      <button class="btn-sm" onclick="openChart(${s.id},'${s.pair}','${s.side}',${s.price_to})">📈</button>
+      <a href="https://pro.kraken.com/app/trade/${s.pair.replace('/','-')}" target="_blank" class="btn-sm" style="text-decoration:none;display:inline-block;margin-left:2px">K↗</a>
+    </td>
+  </tr>`).join('') || '<tr><td colspan="11" class="no-data">No hay señales</td></tr>';
+  // Load 24h ticker for visible pairs (async, no bloquea)
   const seen = new Set();
-  data.forEach(s => { if(!seen.has(s.pair)){ seen.add(s.pair); loadTicker24h(s.pair, data); } });||'<tr><td colspan="9" class="no-data">No hay señales</td></tr>';
+  data.forEach(s => { if(!seen.has(s.pair)){ seen.add(s.pair); loadTicker24h(s.pair, data); } });
 }
 
 async function openChart(signalId,pair,side,entryPrice){
