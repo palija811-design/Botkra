@@ -601,7 +601,7 @@ async function loadCandidates(){
         <div class="score-badge ${scoreClass(sc)}">Score ${sc}</div>
       </div>
       <div class="cand-metrics">
-        <div class="cand-metric"><div class="cand-metric-label">% Reversión media</div><div class="cand-metric-value ${d.avg_reversion>50?'pos':'neg'}">${d.avg_reversion}%</div></div>
+        <div class="cand-metric"><div class="cand-metric-label">% Reversión media</div><div class="cand-metric-value ${d.has_tracking?(d.avg_reversion>50?'pos':'neg'):'muted'}">${d.has_tracking?d.avg_reversion+'%':'⏳ <24h'}</div></div>
         <div class="cand-metric"><div class="cand-metric-label">Frecuencia</div><div class="cand-metric-value" style="color:var(--accent)">${d.frequency}x</div></div>
         <div class="cand-metric"><div class="cand-metric-label">Vol señal medio</div><div class="cand-metric-value vol">${fmt(d.avg_vol)}€</div></div>
         <div class="cand-metric"><div class="cand-metric-label">Diff media señal</div><div class="cand-metric-value neu">${d.avg_diff}%</div></div>
@@ -844,26 +844,33 @@ def api_rafagas():
 @app.route('/api/candidates')
 def api_candidates():
     import math as _math
-    # Una sola query eficiente — sin loops de queries individuales
+    # Primero intentar con tracking completado
     data = db_get("""
-        SELECT
-            s.pair,
-            s.side,
-            COUNT(DISTINCT s.id)                          AS frequency,
-            ROUND(AVG(ABS(pt.pct_change)), 1)             AS avg_reversion,
-            ROUND(MIN(s.volume_eur), 0)                   AS min_vol,
-            ROUND(AVG(s.volume_eur), 0)                   AS avg_vol,
-            ROUND(AVG(s.price_diff_pct), 2)               AS avg_diff
+        SELECT s.pair, s.side,
+               COUNT(DISTINCT s.id)            AS frequency,
+               ROUND(AVG(ABS(pt.pct_change)),1) AS avg_reversion,
+               ROUND(MIN(s.volume_eur),0)       AS min_vol,
+               ROUND(AVG(s.volume_eur),0)       AS avg_vol,
+               ROUND(AVG(s.price_diff_pct),2)   AS avg_diff,
+               1 AS has_tracking
         FROM signals s
-        JOIN price_tracking pt ON pt.signal_id = s.id
-        WHERE pt.minutes = (
-            SELECT MAX(minutes) FROM price_tracking WHERE signal_id = s.id
-        )
-        GROUP BY s.pair, s.side
-        HAVING frequency >= 2
-        ORDER BY avg_reversion DESC
-        LIMIT 30
+        JOIN price_tracking pt ON pt.signal_id=s.id
+        WHERE pt.minutes=(SELECT MAX(minutes) FROM price_tracking WHERE signal_id=s.id)
+        GROUP BY s.pair, s.side HAVING frequency>=2
     """)
+    # Si no hay tracking aun, usar solo signals (sin reversión)
+    if not data:
+        data = db_get("""
+            SELECT pair, side,
+                   COUNT(*)                        AS frequency,
+                   0.0                             AS avg_reversion,
+                   ROUND(MIN(volume_eur),0)        AS min_vol,
+                   ROUND(AVG(volume_eur),0)        AS avg_vol,
+                   ROUND(AVG(price_diff_pct),2)    AS avg_diff,
+                   0 AS has_tracking
+            FROM signals
+            GROUP BY pair, side HAVING frequency>=2
+        """)
     result = []
     for row in data:
         avg_rev   = row['avg_reversion'] or 0
@@ -871,16 +878,17 @@ def api_candidates():
         avg_diff  = row['avg_diff'] or 0
         frequency = row['frequency'] or 1
         vol_factor = _math.log10(max(avg_vol, 100) / 1000 + 1) * 3 + 1
-        score = round(avg_rev/10 * _math.log(frequency+1) * (avg_diff/2+1) * vol_factor, 1)
+        # Sin tracking el score se basa en frecuencia + volumen + diff
+        if row['has_tracking']:
+            score = round(avg_rev/10 * _math.log(frequency+1) * (avg_diff/2+1) * vol_factor, 1)
+        else:
+            score = round(_math.log(frequency+1) * (avg_diff/2+1) * vol_factor, 1)
         result.append({
-            'pair':         row['pair'],
-            'side':         row['side'],
-            'avg_reversion': avg_rev,
-            'frequency':    frequency,
-            'min_vol':      row['min_vol'],
-            'avg_vol':      avg_vol,
-            'avg_diff':     avg_diff,
-            'score':        score
+            'pair': row['pair'], 'side': row['side'],
+            'avg_reversion': avg_rev, 'frequency': frequency,
+            'min_vol': row['min_vol'], 'avg_vol': avg_vol,
+            'avg_diff': avg_diff, 'score': score,
+            'has_tracking': bool(row['has_tracking'])
         })
     result.sort(key=lambda x: x['score'], reverse=True)
     return jsonify(result[:8])
