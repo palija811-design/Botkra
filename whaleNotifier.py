@@ -1199,14 +1199,12 @@ def createTGmessage(tradeDF, pair, volInEUR, priceDiff, wsnames, pairs, ticker=N
     elif(priceDiff >= 20): changeEmoji = '\U0001F92F'
     else: changeEmoji = ""
     volInEUR_annotated = anotateVolume(volInEUR)
-    segundaLinea = f"\n*{sign}{round(priceDiff, 2)}%* {changeEmoji} {whaleEmojis}: {volumeBase} {base} ({volumeTokenAnnotated} {token} {volInEUR_annotated}€)"
-    firstDate = datetime.fromtimestamp(pd.to_numeric(tradeDF["time"].iloc[0])).strftime('%Y-%m-%d %H:%M:%S')
-    lastDate  = datetime.fromtimestamp(pd.to_numeric(tradeDF["time"].iloc[-1])).strftime('%S')
-    terceraLinea = f"\n{firstDate}::{lastDate}"
-    fromPrice = tradeDF["price"].iloc[0]
-    toPrice = tradeDF["price"].iloc[-1]
+    # Segunda linea: lado, diff%, ballenas, volumen en USD
+    segundaLinea = f"\n*{sign}{round(priceDiff, 2)}%* {changeEmoji} {whaleEmojis}: {volInEUR_annotated} USD ({volumeTokenAnnotated} {token})"
+    # Tercera linea: solo enlace a Kraken
     url = f'[{pair}](https://pro.kraken.com/app/trade/{tokenNormalized}-{baseNormalized})'
-    cuartaLinea = f"\n{fromPrice} -> {toPrice} {url}"
+    terceraLinea = f"\n{url}"
+    cuartaLinea = ""
     pairToNonKraken = list(wsnames.keys())[list(wsnames.values()).index(pair)]
     leverage = {key:value.get('leverage_sell') for (key, value) in pairs.items() if value.get('leverage_sell') is not None}
     pairLeverage = leverage[pairToNonKraken]
@@ -1225,10 +1223,10 @@ def createTGmessage(tradeDF, pair, volInEUR, priceDiff, wsnames, pairs, ticker=N
         change_emoji = '📈' if ticker['change_24h'] > 0 else '📉'
         base_token = pair.split('/')[1] if '/' in pair else ''
         vol24_annotated = anotateVolume(round(max(ticker['vol_24h_base'], 1), 0))
-        quintaLinea = f"\n{change_emoji} 24h: *{ticker['change_24h']:+.2f}%* | Vol: {vol24_annotated} {base_token} | H: {ticker['high_24h']} L: {ticker['low_24h']}"
+        quintaLinea = f"\n{change_emoji} 24h: *{ticker['change_24h']:+.2f}%* | Vol 24h: {vol24_annotated} {base_token}"
     else:
         quintaLinea = ""
-    return f"{primeraLinea} {segundaLinea} {terceraLinea} {cuartaLinea}{quintaLinea} {marginMessage}"
+    return f"{primeraLinea} {segundaLinea} {terceraLinea}{quintaLinea} {marginMessage}"
 
 def telegram_bot_sendtext(bot_message):
     url = f'https://api.telegram.org/bot{bot_token}/sendMessage'
