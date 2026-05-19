@@ -236,8 +236,8 @@ header h1{font-family:'Syne',sans-serif;font-size:1.4rem;font-weight:800;color:v
 .stat{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:0.75rem}
 .stat-label{font-size:0.58rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em}
 .stat-value{font-size:1.3rem;font-weight:700;font-family:'Syne',sans-serif;color:var(--accent);margin-top:0.1rem}
-.tabs{display:flex;border-bottom:1px solid var(--border);padding:0 1.5rem;overflow-x:auto;gap:0}
-.tab{padding:0.65rem 1rem;cursor:pointer;font-size:0.72rem;color:var(--muted);border-bottom:2px solid transparent;white-space:nowrap;transition:all 0.2s}
+.tabs{display:flex;border-bottom:1px solid var(--border);padding:0 1.5rem;overflow-x:auto}
+.tab{padding:0.65rem 1.2rem;cursor:pointer;font-size:0.72rem;color:var(--muted);border-bottom:2px solid transparent;white-space:nowrap;transition:all 0.2s}
 .tab.active{color:var(--accent);border-bottom-color:var(--accent)}
 .tab-content{display:none}
 .tab-content.active{display:block}
@@ -266,55 +266,40 @@ tr:hover td{background:var(--surface)}
 .neu{color:var(--orange)}
 .muted{color:var(--muted)}
 .vol{color:#88aacc}
+.sec-title{font-family:'Syne',sans-serif;font-size:0.9rem;font-weight:700;color:var(--accent);padding:1rem 1.5rem 0.3rem}
+.sec-sub{font-size:0.65rem;color:var(--muted);padding:0 1.5rem 0.75rem;line-height:1.6}
+.chip-wrap{display:flex;flex-wrap:wrap;gap:0.3rem;padding:0.6rem 1.5rem;border-bottom:1px solid var(--border)}
+.chip{background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:0.15rem 0.45rem;font-size:0.65rem;cursor:pointer;transition:all 0.15s}
+.chip:hover{border-color:var(--accent);color:var(--accent)}
+.chip .cnt{color:var(--muted);margin-left:0.2rem}
 
-/* ── RAFAGAS ── */
-.rafaga-wrap{padding:1rem 1.5rem;display:flex;flex-direction:column;gap:1rem}
-.rafaga-card{background:var(--surface);border:2px solid var(--orange);border-radius:12px;overflow:hidden;animation:pulse-border 2s infinite}
-.rafaga-card.caliente{border-color:var(--red)}
-.rafaga-card.tibia{border-color:var(--orange)}
-.rafaga-card.fria{border-color:var(--border)}
-@keyframes pulse-border{0%,100%{box-shadow:0 0 0 0 transparent}50%{box-shadow:0 0 12px 2px rgba(255,170,0,0.3)}}
-.rafaga-card.caliente{animation:pulse-border-red 2s infinite}
-@keyframes pulse-border-red{0%,100%{box-shadow:0 0 0 0 transparent}50%{box-shadow:0 0 16px 4px rgba(255,68,102,0.4)}}
-.rafaga-header{display:flex;align-items:center;gap:0.75rem;padding:0.85rem 1rem;border-bottom:1px solid var(--border);flex-wrap:wrap}
-.rafaga-pair{font-family:'Syne',sans-serif;font-size:1.1rem;font-weight:800;color:var(--accent)}
-.rafaga-badge{font-size:0.65rem;font-weight:700;padding:0.2rem 0.55rem;border-radius:20px;font-family:'Syne',sans-serif}
+/* ANALIZAR CARDS */
+.analizar-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:1rem;padding:1.2rem 1.5rem}
+.analizar-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;transition:border-color 0.2s}
+.analizar-card:hover{border-color:var(--accent)}
+.analizar-card.hot{border-color:var(--red);animation:pulse-red 2s infinite}
+.analizar-card.warm{border-color:var(--orange)}
+@keyframes pulse-red{0%,100%{box-shadow:0 0 0 0 transparent}50%{box-shadow:0 0 12px 2px rgba(255,68,102,0.3)}}
+.card-header{padding:0.85rem 1rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:0.5rem;flex-wrap:wrap}
+.card-pair{font-family:'Syne',sans-serif;font-size:1.1rem;font-weight:800;color:var(--accent)}
+.card-badges{display:flex;gap:0.4rem;align-items:center;flex-wrap:wrap}
+.badge{font-size:0.62rem;font-weight:700;padding:0.18rem 0.5rem;border-radius:20px;font-family:'Syne',sans-serif}
 .badge-hot{background:#ff446620;color:var(--red);border:1px solid var(--red)}
 .badge-warm{background:#ffaa0020;color:var(--orange);border:1px solid var(--orange)}
-.badge-cool{background:#00d4ff10;color:var(--muted);border:1px solid var(--muted)}
-.rafaga-meta{display:flex;gap:1.5rem;flex-wrap:wrap;font-size:0.68rem}
-.rafaga-meta span{color:var(--muted)}
-.rafaga-meta strong{color:var(--text)}
-.nivel-key{display:inline-block;background:#001830;border:1px solid var(--green);border-radius:4px;padding:0.15rem 0.5rem;font-size:0.7rem;color:var(--green);font-weight:700;margin-left:0.5rem}
-.nivel-key.sell{border-color:var(--red);color:var(--red)}
-.rafaga-signals{padding:0.75rem 1rem;display:flex;flex-direction:column;gap:0.4rem}
-.rafaga-signal-row{display:grid;grid-template-columns:80px 60px 90px 80px 1fr;gap:0.5rem;align-items:center;font-size:0.68rem;padding:0.3rem 0.5rem;border-radius:6px;background:#080c14}
-.rafaga-signal-row:hover{background:var(--surface)}
-.rafaga-footer{padding:0.65rem 1rem;border-top:1px solid var(--border);display:flex;gap:1rem;align-items:center;flex-wrap:wrap}
-.sugerencia{font-size:0.68rem;background:#001830;border:1px solid var(--accent);border-radius:6px;padding:0.4rem 0.75rem;color:var(--accent)}
-.tiempo-hace{font-size:0.62rem;color:var(--muted)}
-.nivel-recurrente{font-size:0.7rem;color:var(--purple);font-weight:700}
-
-/* CANDIDATOS */
-.candidates-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:0.9rem;padding:1.2rem 1.5rem}
-.candidate-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:1rem;cursor:pointer;transition:border-color 0.2s}
-.candidate-card:hover{border-color:var(--accent)}
-.cand-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem}
-.cand-pair{font-family:'Syne',sans-serif;font-size:0.95rem;font-weight:800;color:var(--accent)}
-.score-badge{font-family:'Syne',sans-serif;font-size:0.75rem;font-weight:800;padding:0.18rem 0.55rem;border-radius:20px}
-.score-high{background:#00ff8820;color:var(--green);border:1px solid var(--green)}
-.score-med{background:#ffaa0020;color:var(--orange);border:1px solid var(--orange)}
-.score-low{background:#ff446620;color:var(--red);border:1px solid var(--red)}
-.cand-metrics{display:grid;grid-template-columns:1fr 1fr;gap:0.4rem}
-.cand-metric{background:#0a1220;border-radius:6px;padding:0.45rem 0.6rem}
-.cand-metric-label{font-size:0.56rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.07em}
-.cand-metric-value{font-size:0.85rem;font-weight:700;font-family:'Syne',sans-serif;margin-top:0.1rem}
-
-/* POR PAR */
-.par-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:0.6rem;margin-bottom:1.2rem}
-.rev-grid{display:grid;grid-template-columns:55px 1fr 48px;gap:0.35rem;align-items:center;margin-bottom:0.35rem;font-size:0.66rem}
-.rev-bar-wrap{background:#0f1a28;border-radius:4px;height:6px;overflow:hidden}
-.rev-bar{height:100%;border-radius:4px}
+.badge-count{background:#00d4ff15;color:var(--accent);border:1px solid var(--accent)}
+.badge-side-b{background:#00ff8815;color:var(--green);border:1px solid var(--green)}
+.badge-side-s{background:#ff446615;color:var(--red);border:1px solid var(--red)}
+.card-metrics{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0;border-bottom:1px solid var(--border)}
+.card-metric{padding:0.6rem 0.8rem;border-right:1px solid var(--border)}
+.card-metric:last-child{border-right:none}
+.card-metric-label{font-size:0.56rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.07em}
+.card-metric-value{font-size:0.9rem;font-weight:700;font-family:'Syne',sans-serif;margin-top:0.1rem}
+.card-signals{padding:0.6rem 0.8rem;border-bottom:1px solid var(--border)}
+.signal-mini{display:flex;gap:0.6rem;align-items:center;font-size:0.66rem;padding:0.2rem 0;border-bottom:1px solid #0a1520}
+.signal-mini:last-child{border-bottom:none}
+.card-footer{padding:0.6rem 0.8rem;display:flex;gap:0.5rem;align-items:center}
+.kraken-btn{display:flex;align-items:center;gap:0.3rem;background:#0a1830;border:1px solid #1a4060;border-radius:6px;padding:0.35rem 0.7rem;font-size:0.65rem;color:var(--accent);text-decoration:none;transition:all 0.2s;font-family:'Space Mono',monospace}
+.kraken-btn:hover{background:var(--accent);color:#000;border-color:var(--accent)}
 
 /* MODAL */
 .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.9);z-index:1000;align-items:center;justify-content:center}
@@ -327,16 +312,19 @@ tr:hover td{background:var(--surface)}
 .chart-container{position:relative;height:240px;margin-bottom:0.9rem}
 .no-data{text-align:center;color:var(--muted);padding:2rem;font-size:0.75rem}
 
+/* POR PAR */
+.par-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:0.6rem;margin-bottom:1.2rem}
+.cand-metric{background:#0a1220;border-radius:6px;padding:0.45rem 0.6rem}
+.cand-metric-label{font-size:0.56rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.07em}
+.cand-metric-value{font-size:0.85rem;font-weight:700;font-family:'Syne',sans-serif;margin-top:0.1rem}
+.rev-grid{display:grid;grid-template-columns:55px 1fr 48px;gap:0.35rem;align-items:center;margin-bottom:0.35rem;font-size:0.66rem}
+.rev-bar-wrap{background:#0f1a28;border-radius:4px;height:6px;overflow:hidden}
+.rev-bar{height:100%;border-radius:4px}
+
 /* EXPORT */
 .export-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:0.9rem;padding:1.2rem 1.5rem}
 .export-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:0.9rem}
 .export-card p{font-size:0.65rem;color:var(--muted);margin:0.4rem 0 0.7rem;line-height:1.5}
-.sec-title{font-family:'Syne',sans-serif;font-size:0.82rem;font-weight:700;color:var(--accent);padding:1rem 1.5rem 0.5rem}
-.sec-sub{font-size:0.65rem;color:var(--muted);padding:0 1.5rem 0.75rem}
-.chip-wrap{display:flex;flex-wrap:wrap;gap:0.3rem;padding:0.6rem 1.5rem;border-bottom:1px solid var(--border)}
-.chip{background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:0.15rem 0.45rem;font-size:0.65rem;cursor:pointer;transition:all 0.15s}
-.chip:hover{border-color:var(--accent);color:var(--accent)}
-.chip .cnt{color:var(--muted);margin-left:0.2rem}
 </style>
 </head>
 <body>
@@ -348,53 +336,43 @@ tr:hover td{background:var(--surface)}
 <div class="chip-wrap" id="topPairs"></div>
 
 <div class="tabs">
-  <div class="tab active" onclick="switchTab('candidates')">🎯 Candidatos</div>
-  <div class="tab" onclick="switchTab('rafagas')">🔥 Ráfagas</div>
-  <div class="tab" onclick="switchTab('par')">🔍 Por par</div>
+  <div class="tab active" onclick="switchTab('analizar')">🔍 Analizar</div>
+  <div class="tab" onclick="switchTab('par')">📊 Por par</div>
   <div class="tab" onclick="switchTab('signals')">📋 Señales</div>
   <div class="tab" onclick="switchTab('export')">📥 Exportar</div>
 </div>
 
-<!-- TAB RÁFAGAS -->
-<div class="tab-content" id="tab-rafagas">
-  <div class="sec-title">🔥 Ráfagas de ballena</div>
-  <div class="sec-sub">Pares con múltiples señales en poco tiempo. Rojo = activo ahora mismo. La clave es el nivel de precio repetido — ahí está la orden.</div>
+<!-- TAB ANALIZAR -->
+<div class="tab-content active" id="tab-analizar">
+  <div class="sec-title">🔍 Pares con actividad repetida de ballena</div>
+  <div class="sec-sub">Pares con múltiples señales en el periodo seleccionado y al menos 50.000 USD de volumen en 24h. 🔴 = señal en últimos 15min.</div>
   <div class="controls">
-    <select id="rafaga-window" onchange="loadRafagas()">
-      <option value="5">Últimos 5 min</option>
-      <option value="15" selected>Últimos 15 min</option>
+    <select id="analizar-window" onchange="loadAnalizar()">
       <option value="30">Últimos 30 min</option>
-      <option value="60">Última hora</option>
+      <option value="60" selected>Última hora</option>
       <option value="240">Últimas 4h</option>
+      <option value="480">Últimas 8h</option>
       <option value="1440">Últimas 24h</option>
     </select>
-    <select id="rafaga-min" onchange="loadRafagas()">
-      <option value="2">Min 2 señales</option>
-      <option value="3" selected>Min 3 señales</option>
+    <select id="analizar-min" onchange="loadAnalizar()">
+      <option value="2" selected>Min 2 señales</option>
+      <option value="3">Min 3 señales</option>
       <option value="4">Min 4 señales</option>
     </select>
-    <button onclick="loadRafagas()">Filtrar</button>
+    <button onclick="loadAnalizar()">Filtrar</button>
+    <span id="analizar-count" style="color:var(--muted);font-size:0.7rem"></span>
   </div>
-  <div class="rafaga-wrap" id="rafaga-wrap">
-    <div class="no-data">Cargando ráfagas...</div>
-  </div>
-</div>
-
-<!-- TAB CANDIDATOS -->
-<div class="tab-content active" id="tab-candidates">
-  <div class="sec-title">🎯 Pares candidatos</div>
-  <div class="sec-sub">Score basado en % reversión × frecuencia × tamaño. Clic en una tarjeta para ver el historial completo.</div>
-  <div class="candidates-grid" id="candidates-grid">
+  <div class="analizar-grid" id="analizar-grid">
     <div class="no-data">Cargando...</div>
   </div>
 </div>
 
 <!-- TAB POR PAR -->
 <div class="tab-content" id="tab-par">
-  <div class="sec-title">🔍 Análisis por par</div>
-  <div class="sec-sub">Historial de mechazos, % reversión por intervalo y niveles clave de precio.</div>
+  <div class="sec-title">📊 Análisis por par</div>
+  <div class="sec-sub">Historial de señales, % reversión por intervalo y niveles clave.</div>
   <div class="controls">
-    <input type="text" id="par-input" placeholder="Ej: ADA/GBP" style="width:140px">
+    <input type="text" id="par-input" placeholder="Ej: BTC/USD" style="width:140px">
     <button onclick="loadPar()">Analizar</button>
   </div>
   <div id="par-content" style="padding:1rem 1.5rem"></div>
@@ -419,7 +397,7 @@ tr:hover td{background:var(--surface)}
   </div>
   <div class="table-wrap">
     <table>
-      <thead><tr><th>#</th><th>Fecha</th><th>Par</th><th>Lado</th><th>Diff %</th><th>Precio entrada</th><th>Precio extremo</th><th>Vol señal €</th><th>Cambio 24h</th><th>Vol 24h</th><th>Chart</th></tr></thead>
+      <thead><tr><th>#</th><th>Fecha</th><th>Par</th><th>Lado</th><th>Diff %</th><th>Vol USD</th><th>Cambio 24h</th><th>Vol 24h</th><th>Chart</th></tr></thead>
       <tbody id="tbody"></tbody>
     </table>
   </div>
@@ -428,12 +406,11 @@ tr:hover td{background:var(--surface)}
 <!-- TAB EXPORTAR -->
 <div class="tab-content" id="tab-export">
   <div class="sec-title">📥 Exportar para análisis IA</div>
-  <div class="sec-sub">Descarga los datos en CSV para analizar con Claude u otras herramientas.</div>
+  <div class="sec-sub">Descarga los datos en CSV.</div>
   <div class="export-grid">
-    <div class="export-card"><div style="color:var(--accent);font-family:'Syne',sans-serif;font-size:0.78rem;font-weight:700">Todas las señales</div><p>Cada señal con par, lado, precio, volumen y timestamp.</p><button class="btn-export" onclick="exportCSV('signals')">⬇ Descargar</button></div>
-    <div class="export-card"><div style="color:var(--accent);font-family:'Syne',sans-serif;font-size:0.78rem;font-weight:700">Ráfagas</div><p>Grupos de señales con nivel clave y sugerencia de orden.</p><button class="btn-export" onclick="exportCSV('rafagas')">⬇ Descargar</button></div>
+    <div class="export-card"><div style="color:var(--accent);font-family:'Syne',sans-serif;font-size:0.78rem;font-weight:700">Señales</div><p>Todas las señales con par, lado, precio, volumen.</p><button class="btn-export" onclick="exportCSV('signals')">⬇ Descargar</button></div>
     <div class="export-card"><div style="color:var(--accent);font-family:'Syne',sans-serif;font-size:0.78rem;font-weight:700">Mechazos + reversión</div><p>Señales con % reversión a 1h, 4h y 24h.</p><button class="btn-export" onclick="exportCSV('mechazos')">⬇ Descargar</button></div>
-    <div class="export-card"><div style="color:var(--accent);font-family:'Syne',sans-serif;font-size:0.78rem;font-weight:700">Win Rate por par</div><p>Ranking de pares por % señales con resultado positivo.</p><button class="btn-export" onclick="exportCSV('winrate')">⬇ Descargar</button></div>
+    <div class="export-card"><div style="color:var(--accent);font-family:'Syne',sans-serif;font-size:0.78rem;font-weight:700">Win Rate</div><p>Ranking de pares por % señales con resultado positivo.</p><button class="btn-export" onclick="exportCSV('winrate')">⬇ Descargar</button></div>
   </div>
 </div>
 
@@ -462,43 +439,28 @@ function pct(v){
   const c=v>0?'pos':v<0?'neg':'neu';
   return `<span class="${c}">${v>0?'+':''}${parseFloat(v).toFixed(2)}%</span>`;
 }
-function scoreClass(s){return s>=7?'score-high':s>=4?'score-med':'score-low';}
 function timeAgo(ts){
   const diff=Math.floor((Date.now()-new Date(ts).getTime())/1000);
   if(diff<60)return diff+'s';
   if(diff<3600)return Math.floor(diff/60)+'min';
-  return Math.floor(diff/3600)+'h';
+  return Math.floor(diff/3600)+'h '+Math.floor((diff%3600)/60)+'min';
+}
+function krakenUrl(pair){
+  const t=pair.split('/')[0]==='XBT'?'BTC':pair.split('/')[0];
+  const b=pair.split('/')[1]==='XBT'?'BTC':pair.split('/')[1];
+  return `https://pro.kraken.com/app/trade/${t}-${b}`;
 }
 
 function switchTab(tab){
-  const tabs=['candidates','rafagas','par','signals','export'];
+  const tabs=['analizar','par','signals','export'];
   document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',tabs[i]===tab));
   document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));
   document.getElementById('tab-'+tab).classList.add('active');
-  if(tab==='rafagas') loadRafagas();
-  if(tab==='candidates') loadCandidates();
   if(tab==='signals') loadSignals();
 }
 
-async function loadTicker24h(pair, signals){
-  try {
-    const r = await fetch('/api/ticker24h?pair='+encodeURIComponent(pair));
-    const t = await r.json();
-    if(!t||t.error) return;
-    const changeClass = t.change_24h > 0 ? 'pos' : t.change_24h < 0 ? 'neg' : 'neu';
-    const changeText = (t.change_24h > 0 ? '+' : '') + t.change_24h + '%';
-    const volText = fmt(t.vol_24h_base);
-    signals.filter(s=>s.pair===pair).forEach(s=>{
-      const chEl = document.getElementById('ch24-'+s.id);
-      const volEl = document.getElementById('vol24-'+s.id);
-      if(chEl) chEl.innerHTML = '<span class="'+changeClass+'">' + changeText + '</span>';
-      if(volEl) volEl.innerHTML = '<span class="vol">' + volText + '</span>';
-    });
-  } catch(e) { console.log('ticker err', e); }
-}
-
 async function loadAll(){
-  await Promise.all([loadStats(), loadCandidates()]);
+  await Promise.all([loadStats(), loadAnalizar()]);
   document.getElementById('lastUpdate').textContent='Actualizado: '+new Date().toLocaleTimeString();
 }
 
@@ -510,7 +472,7 @@ async function loadStats(){
     <div class="stat"><div class="stat-label">Ventas 🍎</div><div class="stat-value" style="color:var(--red)">${s.sells}</div></div>
     <div class="stat"><div class="stat-label">Con tracking</div><div class="stat-value" style="color:var(--orange)">${s.tracked}</div></div>
     <div class="stat"><div class="stat-label">Diff media</div><div class="stat-value">${s.avg_diff}%</div></div>
-    <div class="stat"><div class="stat-label">Vol medio €</div><div class="stat-value">${fmt(s.avg_vol)}</div></div>`;
+    <div class="stat"><div class="stat-label">Vol medio $</div><div class="stat-value">${fmt(s.avg_vol)}</div></div>`;
   document.getElementById('topPairs').innerHTML=s.top_pairs.map(p=>
     `<div class="chip" onclick="goToPar('${p.pair}')">${p.pair}<span class="cnt">${p.count}</span></div>`).join('');
 }
@@ -521,121 +483,103 @@ function goToPar(pair){
   loadPar();
 }
 
-async function loadRafagas(){
-  const window_min = document.getElementById('rafaga-window').value;
-  const min_signals = document.getElementById('rafaga-min').value;
-  const data = await(await fetch(`/api/rafagas?window=${window_min}&min=${min_signals}`)).json();
-  const el = document.getElementById('rafaga-wrap');
-  if(!data||data.length===0){
-    el.innerHTML='<div class="no-data">No hay ráfagas en este periodo.<br><br>Prueba ampliar la ventana de tiempo o reducir el mínimo de señales.</div>';
-    return;
-  }
-  el.innerHTML = data.map(r => {
-    const minAgo = Math.floor((Date.now()-new Date(r.last_signal).getTime())/60000);
-    const isHot  = minAgo < 5;
-    const isWarm = minAgo < 30;
-    const cardClass = isHot?'caliente':isWarm?'tibia':'fria';
-    const badgeClass = isHot?'badge-hot':isWarm?'badge-warm':'badge-cool';
-    const badgeText = isHot?'🔴 AHORA':isWarm?'🟡 RECIENTE':'⚪ ANTIGUO';
-    const sideLabel = r.dominant_side==='b'?'🍏 Compras ballena':'🍎 Ventas ballena';
-    const nivelClass = r.dominant_side==='b'?'':'sell';
-    const orderSugg = r.dominant_side==='b'
-      ? `VENTA límite en ${r.nivel_clave} (si crees que revierte)`
-      : `COMPRA límite en ${r.nivel_clave} (si crees que revierte)`;
-    const rows = (r.signals||[]).map(s=>`
-      <div class="rafaga-signal-row">
-        <span class="muted">${s.timestamp.replace('T',' ').substring(11,19)}</span>
-        <span class="${s.side==='b'?'buy':'sell'}">${s.side==='b'?'🍏 BUY':'🍎 SELL'}</span>
-        <span class="neu">${s.price_diff_pct>0?'+':''}${s.price_diff_pct}%</span>
-        <span class="vol">${parseFloat(s.price_to).toPrecision(5)}</span>
-        <span class="vol">${fmt(s.volume_eur)}€</span>
-      </div>`).join('');
-    return `<div class="rafaga-card ${cardClass}">
-      <div class="rafaga-header">
-        <span class="rafaga-pair">${r.pair}</span>
-        <span class="rafaga-badge ${badgeClass}">${badgeText}</span>
-        <span class="rafaga-badge" style="background:#00d4ff10;color:var(--accent);border:1px solid var(--accent)">${r.count} señales</span>
-        <span style="font-size:0.65rem;color:var(--muted)">hace ${timeAgo(r.last_signal)}</span>
-      </div>
-      <div class="rafaga-meta" style="padding:0.6rem 1rem">
-        <span>${sideLabel}</span>
-        <span>Diff media: <strong>${r.avg_diff}%</strong></span>
-        <span>Vol total: <strong class="vol">${fmt(r.total_vol)}€</strong></span>
-        <span>Duración: <strong>${r.duracion_min}min</strong></span>
-        <span>Nivel clave: <strong class="nivel-clave ${nivelClass}" style="color:${r.dominant_side==='b'?'var(--green)':'var(--red)'}">${r.nivel_clave}</strong></span>
-        ${r.nivel_recurrente?`<span>Nivel recurrente: <span class="nivel-recurrente">⭐ ${r.nivel_recurrente}</span></span>`:''}
-      </div>
-      <div class="rafaga-signals">${rows}</div>
-      <div class="rafaga-footer">
-        <div class="sugerencia">💡 ${orderSugg}</div>
-        <button class="btn-sm" onclick="goToPar('${r.pair}')">🔍 Ver historial</button>
-        <a href="https://pro.kraken.com/app/trade/${r.pair.replace('/','-')}" target="_blank" class="btn-sm" style="text-decoration:none;display:inline-block">📊 Kraken</a>
-      </div>
-    </div>`;
-  }).join('');
-}
+async function loadAnalizar(){
+  const win=document.getElementById('analizar-window').value;
+  const min=document.getElementById('analizar-min').value;
+  const el=document.getElementById('analizar-grid');
+  el.innerHTML='<div class="no-data">Cargando...</div>';
 
-async function loadCandidates(){
-  let data;
+  let groups;
   try {
-    const r = await fetch('/api/candidates');
-    data = await r.json();
-  } catch(e) {
-    document.getElementById('candidates-grid').innerHTML='<div class="no-data" style="grid-column:1/-1">Error cargando candidatos. Reintenta en unos segundos.</div>';
+    groups=await(await fetch(`/api/analizar?window=${win}&min=${min}`)).json();
+  } catch(e){
+    el.innerHTML='<div class="no-data">Error cargando datos</div>';
     return;
   }
-  if(!data||data.length===0){
-    document.getElementById('candidates-grid').innerHTML='<div class="no-data" style="grid-column:1/-1">Necesitas señales con tracking de 24h completado para ver candidatos.<br><br>Mientras tanto revisa 🔥 Ráfagas para ver movimientos en tiempo real.</div>';
+
+  if(!groups||groups.length===0){
+    el.innerHTML='<div class="no-data">No hay pares con actividad repetida en este periodo.<br>Prueba ampliar la ventana de tiempo.</div>';
+    document.getElementById('analizar-count').textContent='';
     return;
   }
-  document.getElementById('candidates-grid').innerHTML=data.map(d=>{
-    const sc=parseFloat(d.score);
-    const tokenNorm = d.pair.split('/')[0]==='XBT'?'BTC':d.pair.split('/')[0];
-    const baseNorm  = d.pair.split('/')[1]==='XBT'?'BTC':d.pair.split('/')[1];
-    const krakenUrl = `https://pro.kraken.com/app/trade/${tokenNorm}-${baseNorm}`;
-    return `<div class="candidate-card">
-      <div class="cand-header">
+
+  document.getElementById('analizar-count').textContent=`${groups.length} pares activos`;
+
+  // Fetch ticker batch for all pairs
+  const pairs=groups.map(g=>g.pair).join(',');
+  let tickers={};
+  try {
+    tickers=await(await fetch('/api/ticker_batch?pairs='+encodeURIComponent(pairs))).json();
+  } catch(e){}
+
+  // Filter by 50K vol 24h
+  const filtered=groups.filter(g=>{
+    const t=tickers[g.pair];
+    return !t || t.vol_24h_base>=50000;
+  });
+
+  if(filtered.length===0){
+    el.innerHTML='<div class="no-data">No hay pares con 50.000 USD+ de volumen en 24h en este periodo.</div>';
+    return;
+  }
+
+  document.getElementById('analizar-count').textContent=`${filtered.length} pares activos (vol 24h >50K$)`;
+
+  el.innerHTML=filtered.map(g=>{
+    const t=tickers[g.pair]||{};
+    const minAgo=Math.floor((Date.now()-new Date(g.last_signal).getTime())/60000);
+    const isHot=minAgo<15;
+    const isWarm=minAgo<60;
+    const cardClass=isHot?'hot':isWarm?'warm':'';
+    const badgeClass=isHot?'badge-hot':'badge-warm';
+    const badgeText=isHot?'🔴 AHORA':'🟡 RECIENTE';
+    const sideClass=g.dominant_side==='b'?'badge-side-b':'badge-side-s';
+    const sideText=g.dominant_side==='b'?'🍏 COMPRA':'🍎 VENTA';
+    const changeClass=t.change_24h>0?'pos':t.change_24h<0?'neg':'neu';
+    const kUrl=krakenUrl(g.pair);
+
+    const signalRows=(g.signals||[]).slice(0,5).map(s=>`
+      <div class="signal-mini">
+        <span class="${s.side==='b'?'buy':'sell'}">${s.side==='b'?'🍏':'🍎'}</span>
+        <span class="neu">+${s.price_diff_pct}%</span>
+        <span class="vol">${fmt(s.volume_eur)}$</span>
+        <span class="muted" style="font-size:0.6rem">${s.timestamp.replace('T',' ').substring(11,19)}</span>
+        <button class="btn-sm" onclick="openChart(${s.id},'${g.pair}','${s.side}',${s.price_to})" style="margin-left:auto">📈</button>
+      </div>`).join('');
+
+    return `<div class="analizar-card ${cardClass}">
+      <div class="card-header">
         <div>
-          <div style="display:flex;align-items:center;gap:0.5rem">
-            <div class="cand-pair" onclick="goToPar('${d.pair}')" style="cursor:pointer">${d.pair}</div>
-            <a href="${krakenUrl}" target="_blank" style="font-size:0.65rem;color:var(--muted);text-decoration:none;border:1px solid var(--muted);border-radius:4px;padding:0.1rem 0.35rem" title="Ver en Kraken Pro">📊 K</a>
-          </div>
-          <div style="font-size:0.6rem;color:var(--muted);margin-top:0.15rem">${d.side==='b'?'🍏 Compras':'🍎 Ventas'} ballena</div>
+          <div class="card-pair">${g.pair}</div>
+          <div style="font-size:0.6rem;color:var(--muted);margin-top:0.1rem">hace ${timeAgo(g.last_signal)}</div>
         </div>
-        <div class="score-badge ${scoreClass(sc)}">Score ${sc}</div>
+        <div class="card-badges">
+          <span class="badge ${badgeClass}">${badgeText}</span>
+          <span class="badge badge-count">${g.count} señales</span>
+          <span class="badge ${sideClass}">${sideText}</span>
+        </div>
       </div>
-      <div class="cand-metrics">
-        <div class="cand-metric"><div class="cand-metric-label">% Reversión media</div><div class="cand-metric-value ${d.has_tracking?(d.avg_reversion>50?'pos':'neg'):'muted'}">${d.has_tracking?d.avg_reversion+'%':'⏳ <24h'}</div></div>
-        <div class="cand-metric"><div class="cand-metric-label">Frecuencia</div><div class="cand-metric-value" style="color:var(--accent)">${d.frequency}x</div></div>
-        <div class="cand-metric"><div class="cand-metric-label">Vol señal medio</div><div class="cand-metric-value vol">${fmt(d.avg_vol)}€</div></div>
-        <div class="cand-metric"><div class="cand-metric-label">Diff media señal</div><div class="cand-metric-value neu">${d.avg_diff}%</div></div>
-        <div class="cand-metric" id="cch24-${d.pair.replace('/','')}-${d.side}"><div class="cand-metric-label">Cambio 24h</div><div class="cand-metric-value muted" style="font-size:0.75rem">...</div></div>
-        <div class="cand-metric" id="cvol24-${d.pair.replace('/','')}-${d.side}"><div class="cand-metric-label">Vol 24h</div><div class="cand-metric-value muted" style="font-size:0.75rem">...</div></div>
+      <div class="card-metrics">
+        <div class="card-metric">
+          <div class="card-metric-label">Diff media</div>
+          <div class="card-metric-value neu">${g.avg_diff}%</div>
+        </div>
+        <div class="card-metric">
+          <div class="card-metric-label">Cambio 24h</div>
+          <div class="card-metric-value ${changeClass}">${t.change_24h!==undefined?(t.change_24h>0?'+':'')+t.change_24h+'%':'—'}</div>
+        </div>
+        <div class="card-metric">
+          <div class="card-metric-label">Vol 24h</div>
+          <div class="card-metric-value vol">${t.vol_24h_base!==undefined?fmt(t.vol_24h_base)+'$':'—'}</div>
+        </div>
       </div>
-      <div style="margin-top:0.75rem">
-        <a href="${krakenUrl}" target="_blank" style="display:block;width:100%;text-align:center;background:#0a1830;border:1px solid #1a4060;border-radius:6px;padding:0.4rem;font-size:0.68rem;color:var(--accent);text-decoration:none">📊 Ver gráfico en Kraken Pro →</a>
+      <div class="card-signals">${signalRows}</div>
+      <div class="card-footer">
+        <a href="${kUrl}" target="_blank" class="kraken-btn">📊 Ver en Kraken Pro</a>
+        <button class="btn-sm" onclick="goToPar('${g.pair}')">🔍 Historial</button>
       </div>
     </div>`;
   }).join('');
-  // Una sola llamada batch para todos los pares
-  const uniquePairs = [...new Set(data.map(d=>d.pair))].join(',');
-  try {
-    const tickers = await(await fetch('/api/ticker_batch?pairs='+encodeURIComponent(uniquePairs))).json();
-    data.forEach(d => {
-      const key = d.pair.replace('/','') + '-' + d.side;
-      const t = tickers[d.pair];
-      if(!t) return;
-      const chEl = document.getElementById('cch24-'+key);
-      const volEl = document.getElementById('cvol24-'+key);
-      if(chEl){
-        const cc = t.change_24h>0?'pos':t.change_24h<0?'neg':'neu';
-        chEl.innerHTML = `<div class="cand-metric-label">Cambio 24h</div><div class="cand-metric-value ${cc}">${t.change_24h>0?'+':''}${t.change_24h}%</div>`;
-      }
-      if(volEl){
-        volEl.innerHTML = `<div class="cand-metric-label">Vol 24h</div><div class="cand-metric-value vol">${fmt(t.vol_24h_base)}</div>`;
-      }
-    });
-  } catch(e){ console.log('batch ticker err',e); }
 }
 
 async function loadPar(){
@@ -644,17 +588,17 @@ async function loadPar(){
   const data=await(await fetch('/api/par?pair='+encodeURIComponent(pair))).json();
   const el=document.getElementById('par-content');
   if(!data||data.total===0){el.innerHTML='<div class="no-data">No hay datos para '+pair+'</div>';return;}
-  const r1c=data.rev_1h_media>50?'pos':'neg';
-  const r4c=data.rev_4h_media>50?'pos':'neg';
-  const r24c=data.rev_24h_media>50?'pos':'neg';
+  const r1c=(data.rev_1h_media||0)>50?'pos':'neg';
+  const r4c=(data.rev_4h_media||0)>50?'pos':'neg';
+  const r24c=(data.rev_24h_media||0)>50?'pos':'neg';
   el.innerHTML=`
     <div class="par-metrics">
       <div class="cand-metric"><div class="cand-metric-label">Total señales</div><div class="cand-metric-value" style="color:var(--accent)">${data.total}</div></div>
       <div class="cand-metric"><div class="cand-metric-label">Rev. media 1h</div><div class="cand-metric-value ${r1c}">${data.rev_1h_media??'—'}%</div></div>
       <div class="cand-metric"><div class="cand-metric-label">Rev. media 4h</div><div class="cand-metric-value ${r4c}">${data.rev_4h_media??'—'}%</div></div>
       <div class="cand-metric"><div class="cand-metric-label">Rev. media 24h</div><div class="cand-metric-value ${r24c}">${data.rev_24h_media??'—'}%</div></div>
-      <div class="cand-metric"><div class="cand-metric-label">Vol mínimo</div><div class="cand-metric-value vol">${fmt(data.vol_min)}€</div></div>
-      <div class="cand-metric"><div class="cand-metric-label">Vol medio</div><div class="cand-metric-value vol">${fmt(data.vol_avg)}€</div></div>
+      <div class="cand-metric"><div class="cand-metric-label">Vol mínimo</div><div class="cand-metric-value vol">${fmt(data.vol_min)}$</div></div>
+      <div class="cand-metric"><div class="cand-metric-label">Vol medio</div><div class="cand-metric-value vol">${fmt(data.vol_avg)}$</div></div>
     </div>
     <div style="font-size:0.65rem;color:var(--muted);margin-bottom:0.6rem">REVERSIÓN POR INTERVALO</div>
     <div style="max-width:380px;margin-bottom:1.2rem">
@@ -662,16 +606,16 @@ async function loadPar(){
       <div class="rev-grid"><span class="muted">4h</span><div class="rev-bar-wrap"><div class="rev-bar" style="width:${Math.min(data.rev_4h_media||0,100)}%;background:${(data.rev_4h_media||0)>50?'var(--green)':'var(--red)'}"></div></div><span class="${r4c}">${data.rev_4h_media??'—'}%</span></div>
       <div class="rev-grid"><span class="muted">24h</span><div class="rev-bar-wrap"><div class="rev-bar" style="width:${Math.min(data.rev_24h_media||0,100)}%;background:${(data.rev_24h_media||0)>50?'var(--green)':'var(--red)'}"></div></div><span class="${r24c}">${data.rev_24h_media??'—'}%</span></div>
     </div>
-    <div style="font-size:0.65rem;color:var(--muted);margin-bottom:0.6rem">MECHAZOS HISTÓRICOS</div>
+    <div style="font-size:0.65rem;color:var(--muted);margin-bottom:0.6rem">SEÑALES HISTÓRICAS</div>
     <div class="table-wrap"><table>
-      <thead><tr><th>#</th><th>Fecha</th><th>Lado</th><th>Diff %</th><th>Precio extremo</th><th>Vol €</th><th>Rev 1h</th><th>Rev 4h</th><th>Rev 24h</th><th>Chart</th></tr></thead>
+      <thead><tr><th>#</th><th>Fecha</th><th>Lado</th><th>Diff %</th><th>Precio extremo</th><th>Vol $</th><th>Rev 1h</th><th>Rev 4h</th><th>Rev 24h</th><th>Chart</th></tr></thead>
       <tbody>${(data.signals||[]).map(s=>`<tr>
         <td class="muted">#${s.id}</td>
         <td class="muted" style="font-size:0.65rem">${s.timestamp.replace('T',' ').substring(0,16)}</td>
         <td>${s.side==='b'?'<span class="buy">🍏</span>':'<span class="sell">🍎</span>'}</td>
         <td>${pct(s.price_diff_pct)}</td>
         <td class="vol">${parseFloat(s.price_extremo).toPrecision(5)}</td>
-        <td class="vol">${fmt(s.volume_eur)}€</td>
+        <td class="vol">${fmt(s.volume_eur)}$</td>
         <td>${pct(s.rev_1h)}</td><td>${pct(s.rev_4h)}</td><td>${pct(s.rev_24h)}</td>
         <td><button class="btn-sm" onclick="openChart(${s.id},'${s.pair}','${s.side}',${s.price_extremo})">📈</button></td>
       </tr>`).join('')}</tbody>
@@ -687,25 +631,34 @@ async function loadSignals(){
   document.getElementById('tbody').innerHTML=data.map(s=>`<tr>
     <td class="muted">#${s.id}</td>
     <td class="muted" style="font-size:0.65rem">${s.timestamp.replace('T',' ').substring(0,19)}</td>
-    <td>
-      <span class="pair-tag" onclick="goToPar('${s.pair}')">${s.pair}</span>
-      <a href="https://pro.kraken.com/app/trade/${s.pair.replace('/','-')}" target="_blank" style="font-size:0.6rem;color:var(--muted);margin-left:0.3rem;text-decoration:none" title="Ver en Kraken Pro">↗</a>
+    <td><span class="pair-tag" onclick="goToPar('${s.pair}')">${s.pair}</span>
+      <a href="${krakenUrl(s.pair)}" target="_blank" style="font-size:0.6rem;color:var(--muted);margin-left:0.3rem;text-decoration:none">↗</a>
     </td>
     <td>${s.side==='b'?'<span class="buy">🍏 BUY</span>':'<span class="sell">🍎 SELL</span>'}</td>
     <td>${pct(s.price_diff_pct)}</td>
-    <td class="vol" style="font-size:0.68rem">${parseFloat(s.price_from).toPrecision(5)}</td>
-    <td class="vol" style="font-size:0.68rem">${parseFloat(s.price_to).toPrecision(5)}</td>
-    <td class="vol">${fmt(s.volume_eur)}€</td>
+    <td class="vol">${fmt(s.volume_eur)}$</td>
     <td id="ch24-${s.id}" class="muted" style="font-size:0.7rem">...</td>
     <td id="vol24-${s.id}" class="muted" style="font-size:0.7rem">...</td>
-    <td>
-      <button class="btn-sm" onclick="openChart(${s.id},'${s.pair}','${s.side}',${s.price_to})">📈</button>
-      <a href="https://pro.kraken.com/app/trade/${s.pair.replace('/','-')}" target="_blank" class="btn-sm" style="text-decoration:none;display:inline-block;margin-left:2px">K↗</a>
+    <td><button class="btn-sm" onclick="openChart(${s.id},'${s.pair}','${s.side}',${s.price_to})">📈</button>
+      <a href="${krakenUrl(s.pair)}" target="_blank" class="btn-sm" style="text-decoration:none;display:inline-block;margin-left:2px">K↗</a>
     </td>
-  </tr>`).join('') || '<tr><td colspan="11" class="no-data">No hay señales</td></tr>';
-  // Load 24h ticker for visible pairs (async, no bloquea)
-  const seen = new Set();
-  data.forEach(s => { if(!seen.has(s.pair)){ seen.add(s.pair); loadTicker24h(s.pair, data); } });
+  </tr>`).join('')||'<tr><td colspan="9" class="no-data">No hay señales</td></tr>';
+  const seen=new Set();
+  data.forEach(s=>{if(!seen.has(s.pair)){seen.add(s.pair);loadTicker24h(s.pair,data);}});
+}
+
+async function loadTicker24h(pair,signals){
+  try {
+    const t=await(await fetch('/api/ticker24h?pair='+encodeURIComponent(pair))).json();
+    if(!t||t.error)return;
+    const cc=t.change_24h>0?'pos':t.change_24h<0?'neg':'neu';
+    signals.filter(s=>s.pair===pair).forEach(s=>{
+      const chEl=document.getElementById('ch24-'+s.id);
+      const volEl=document.getElementById('vol24-'+s.id);
+      if(chEl)chEl.innerHTML=`<span class="${cc}">${t.change_24h>0?'+':''}${t.change_24h}%</span>`;
+      if(volEl)volEl.innerHTML=`<span class="vol">${fmt(t.vol_24h_base)}$</span>`;
+    });
+  } catch(e){}
 }
 
 async function openChart(signalId,pair,side,entryPrice){
@@ -717,7 +670,7 @@ async function openChart(signalId,pair,side,entryPrice){
   if(chartInstance){chartInstance.destroy();chartInstance=null;}
   const data=await(await fetch(`/api/tracking/${signalId}`)).json();
   const pts=data.tracking; const sig=data.signal;
-  document.getElementById('modal-meta').textContent=`${sig.side==='b'?'🍏 BUY':'🍎 SELL'} | Entrada: ${parseFloat(sig.price_to).toPrecision(5)} | Vol: ${fmt(sig.volume_eur)}€ | ${sig.timestamp.substring(0,19)}`;
+  document.getElementById('modal-meta').textContent=`${sig.side==='b'?'🍏 BUY':'🍎 SELL'} | Entrada: ${parseFloat(sig.price_to).toPrecision(5)} | Vol: ${fmt(sig.volume_eur)}$ | ${sig.timestamp.substring(0,19)}`;
   if(!pts||pts.length===0){document.getElementById('no-data').style.display='block';document.getElementById('priceChart').style.display='none';return;}
   const color=pts[pts.length-1].pct_change>=0?'#00ff88':'#ff4466';
   chartInstance=new Chart(document.getElementById('priceChart'),{type:'line',data:{labels:pts.map(p=>`+${p.minutes}min`),datasets:[{label:'Precio',data:pts.map(p=>p.price),borderColor:color,backgroundColor:color+'15',borderWidth:2,pointRadius:0,tension:0.3,fill:true,yAxisID:'y'},{label:'% cambio',data:pts.map(p=>p.pct_change),borderColor:'#00d4ff',borderWidth:1,borderDash:[4,4],pointRadius:0,tension:0.3,fill:false,yAxisID:'y2'}]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:{labels:{color:'#4a6080',font:{family:'Space Mono',size:10}}},tooltip:{backgroundColor:'#0d1420',borderColor:'#1a2535',borderWidth:1,titleColor:'#c8d8e8',bodyColor:'#c8d8e8'}},scales:{x:{ticks:{color:'#4a6080',font:{size:9},maxTicksLimit:12},grid:{color:'#0f1a28'}},y:{ticks:{color:'#00ff88',font:{size:9}},grid:{color:'#0f1a28'},position:'left'},y2:{ticks:{color:'#00d4ff',font:{size:9}},grid:{display:false},position:'right'}}}});
@@ -726,7 +679,7 @@ function closeModal(){document.getElementById('modal').classList.remove('open');
 document.getElementById('modal').addEventListener('click',e=>{if(e.target===document.getElementById('modal'))closeModal();});
 function exportCSV(type){window.location.href='/api/export/'+type;}
 loadAll();
-setInterval(loadAll,30000);
+setInterval(loadAll,60000);
 </script>
 </body>
 </html>
@@ -748,7 +701,7 @@ def db_one(query, params=[]):
     return val
 
 def get_reversion(signal_id, minutes_target):
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=10)
     row = conn.execute("""
         SELECT pct_change FROM price_tracking
         WHERE signal_id=? AND minutes<=?
@@ -791,21 +744,16 @@ def api_tracking(signal_id):
     signal = db_get("SELECT * FROM signals WHERE id=?", [signal_id])
     return jsonify({"signal": signal[0] if signal else {}, "tracking": rows})
 
-@app.route('/api/rafagas')
-def api_rafagas():
+@app.route('/api/analizar')
+def api_analizar():
     from datetime import datetime, timedelta
-    window_min = int(flask_request.args.get('window', 15))
-    min_signals = int(flask_request.args.get('min', 3))
+    from collections import defaultdict, Counter
+    window_min  = int(flask_request.args.get('window', 60))
+    min_signals = int(flask_request.args.get('min', 2))
     since = (datetime.utcnow() - timedelta(minutes=window_min)).isoformat()
-    signals = db_get("""
-        SELECT * FROM signals
-        WHERE timestamp >= ?
-        ORDER BY pair, timestamp ASC
-    """, [since])
+    signals = db_get("SELECT * FROM signals WHERE timestamp >= ? ORDER BY pair, timestamp ASC", [since])
     if not signals:
         return jsonify([])
-    # Agrupar por par
-    from collections import defaultdict
     by_pair = defaultdict(list)
     for s in signals:
         by_pair[s['pair']].append(s)
@@ -817,87 +765,18 @@ def api_rafagas():
         dominant_side = max(set(sides), key=sides.count)
         diffs = [s['price_diff_pct'] for s in sigs]
         vols  = [s['volume_eur'] for s in sigs]
-        prices_to = [float(s['price_to']) for s in sigs]
-        # Nivel clave: precio extremo más repetido (redondeado a 4 decimales)
-        rounded = [round(p, 4) for p in prices_to]
-        from collections import Counter
-        cnt = Counter(rounded)
-        nivel_clave = cnt.most_common(1)[0][0]
-        nivel_recurrente = cnt.most_common(1)[0][0] if cnt.most_common(1)[0][1] > 1 else None
-        # Duracion en minutos
-        t_first = sigs[0]['timestamp']
-        t_last  = sigs[-1]['timestamp']
-        try:
-            dur = max(1, int((datetime.fromisoformat(t_last) - datetime.fromisoformat(t_first)).total_seconds() / 60))
-        except:
-            dur = 1
+        t_last = sigs[-1]['timestamp']
         result.append({
             'pair': pair,
             'count': len(sigs),
             'dominant_side': dominant_side,
             'avg_diff': round(sum(diffs)/len(diffs), 2),
             'total_vol': round(sum(vols), 0),
-            'nivel_clave': nivel_clave,
-            'nivel_recurrente': nivel_recurrente,
-            'duracion_min': dur,
             'last_signal': t_last,
             'signals': sigs
         })
-    # Ordenar: primero más recientes
     result.sort(key=lambda x: x['last_signal'], reverse=True)
     return jsonify(result)
-
-@app.route('/api/candidates')
-def api_candidates():
-    import math as _math
-    # Primero intentar con tracking completado
-    data = db_get("""
-        SELECT s.pair, s.side,
-               COUNT(DISTINCT s.id)            AS frequency,
-               ROUND(AVG(ABS(pt.pct_change)),1) AS avg_reversion,
-               ROUND(MIN(s.volume_eur),0)       AS min_vol,
-               ROUND(AVG(s.volume_eur),0)       AS avg_vol,
-               ROUND(AVG(s.price_diff_pct),2)   AS avg_diff,
-               1 AS has_tracking
-        FROM signals s
-        JOIN price_tracking pt ON pt.signal_id=s.id
-        WHERE pt.minutes=(SELECT MAX(minutes) FROM price_tracking WHERE signal_id=s.id)
-        GROUP BY s.pair, s.side HAVING frequency>=2
-    """)
-    # Si no hay tracking aun, usar solo signals (sin reversión)
-    if not data:
-        data = db_get("""
-            SELECT pair, side,
-                   COUNT(*)                        AS frequency,
-                   0.0                             AS avg_reversion,
-                   ROUND(MIN(volume_eur),0)        AS min_vol,
-                   ROUND(AVG(volume_eur),0)        AS avg_vol,
-                   ROUND(AVG(price_diff_pct),2)    AS avg_diff,
-                   0 AS has_tracking
-            FROM signals
-            GROUP BY pair, side HAVING frequency>=2
-        """)
-    result = []
-    for row in data:
-        avg_rev   = row['avg_reversion'] or 0
-        avg_vol   = row['avg_vol'] or 100
-        avg_diff  = row['avg_diff'] or 0
-        frequency = row['frequency'] or 1
-        vol_factor = _math.log10(max(avg_vol, 100) / 1000 + 1) * 3 + 1
-        # Sin tracking el score se basa en frecuencia + volumen + diff
-        if row['has_tracking']:
-            score = round(avg_rev/10 * _math.log(frequency+1) * (avg_diff/2+1) * vol_factor, 1)
-        else:
-            score = round(_math.log(frequency+1) * (avg_diff/2+1) * vol_factor, 1)
-        result.append({
-            'pair': row['pair'], 'side': row['side'],
-            'avg_reversion': avg_rev, 'frequency': frequency,
-            'min_vol': row['min_vol'], 'avg_vol': avg_vol,
-            'avg_diff': avg_diff, 'score': score,
-            'has_tracking': bool(row['has_tracking'])
-        })
-    result.sort(key=lambda x: x['score'], reverse=True)
-    return jsonify(result[:8])
 
 @app.route('/api/par')
 def api_par():
@@ -916,21 +795,6 @@ def api_par():
     avg = lambda lst: round(sum(lst)/len(lst),1) if lst else None
     return jsonify({'total':len(signals),'rev_1h_media':avg(revs_1h),'rev_4h_media':avg(revs_4h),'rev_24h_media':avg(revs_24h),'vol_min':round(min(vols),0),'vol_avg':round(sum(vols)/len(vols),0),'avg_diff':round(sum(diffs)/len(diffs),2),'signals':enriched[:50]})
 
-@app.route('/api/mechazos')
-def api_mechazos():
-    pair = flask_request.args.get('pair', '')
-    side = flask_request.args.get('side', '')
-    q = "SELECT * FROM signals WHERE 1=1"
-    p = []
-    if pair: q += " AND pair LIKE ?"; p.append(f"%{pair}%")
-    if side: q += " AND side = ?"; p.append(side)
-    q += " ORDER BY id DESC LIMIT 200"
-    signals = db_get(q, p)
-    result = []
-    for s in signals:
-        result.append({**s,'price_extremo':s['price_to'],'rev_1h':get_reversion(s['id'],60),'rev_4h':get_reversion(s['id'],240),'rev_24h':get_reversion(s['id'],1440)})
-    return jsonify(result)
-
 @app.route('/api/winrate')
 def api_winrate():
     return jsonify(db_get("""
@@ -945,28 +809,22 @@ def api_winrate():
 @app.route('/api/ticker_batch')
 def api_ticker_batch():
     pairs = flask_request.args.get('pairs', '')
-    if not pairs:
-        return jsonify({})
+    if not pairs: return jsonify({})
     result = {}
     for pair in pairs.split(','):
         pair = pair.strip()
         if pair:
             data = get_ticker_24h(pair)
-            if data:
-                result[pair] = data
+            if data: result[pair] = data
     return jsonify(result)
-
 
 @app.route('/api/ticker24h')
 def api_ticker24h():
     pair = flask_request.args.get('pair', '')
-    if not pair:
-        return jsonify({'error': 'no pair'})
+    if not pair: return jsonify({'error': 'no pair'})
     data = get_ticker_24h(pair)
-    if not data:
-        return jsonify({'error': 'no data'})
+    if not data: return jsonify({'error': 'no data'})
     return jsonify(data)
-
 
 @app.route('/api/export/<export_type>')
 def api_export(export_type):
@@ -981,21 +839,6 @@ def api_export(export_type):
         data = [{**s,'rev_1h':get_reversion(s['id'],60),'rev_4h':get_reversion(s['id'],240),'rev_24h':get_reversion(s['id'],1440),'price_extremo':s['price_to']} for s in signals]
         fields = ['id','timestamp','pair','side','price_diff_pct','price_extremo','volume_eur','num_trades','rev_1h','rev_4h','rev_24h']
         filename = 'whale_mechazos.csv'
-    elif export_type == 'rafagas':
-        from datetime import datetime, timedelta
-        from collections import defaultdict, Counter
-        signals = db_get("SELECT * FROM signals ORDER BY pair, timestamp ASC")
-        by_pair = defaultdict(list)
-        for s in signals: by_pair[s['pair']].append(s)
-        data = []
-        for pair, sigs in by_pair.items():
-            if len(sigs) < 2: continue
-            sides = [s['side'] for s in sigs]; dom = max(set(sides), key=sides.count)
-            prices = [round(float(s['price_to']),4) for s in sigs]
-            nivel = Counter(prices).most_common(1)[0][0]
-            data.append({'pair':pair,'total_senales':len(sigs),'lado_dominante':dom,'nivel_clave':nivel,'vol_total':round(sum(s['volume_eur'] for s in sigs),0),'diff_media':round(sum(s['price_diff_pct'] for s in sigs)/len(sigs),2),'primera_senal':sigs[0]['timestamp'],'ultima_senal':sigs[-1]['timestamp']})
-        fields = ['pair','total_senales','lado_dominante','nivel_clave','vol_total','diff_media','primera_senal','ultima_senal']
-        filename = 'whale_rafagas.csv'
     elif export_type == 'winrate':
         data = db_get("""
             SELECT s.pair, s.side, COUNT(*) as total,
