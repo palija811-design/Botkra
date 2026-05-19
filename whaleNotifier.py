@@ -157,14 +157,39 @@ def get_ticker_24h(pair):
         if not result:
             return None
         t = list(result.values())[0]
-        vol_24h_token = float(t['v'][1])   # volumen 24h en tokens
-        vol_24h_base  = float(t['v'][1]) * float(t['p'][1])  # volumen 24h en moneda base
-        change_24h    = round((float(t['c'][0]) - float(t['o'])) / float(t['o']) * 100, 2)
-        high_24h      = float(t['h'][1])
-        low_24h       = float(t['l'][1])
+        vol_24h_token = float(t['v'][1])          # tokens operados en 24h
+        price_avg     = float(t['p'][1])           # precio medio ponderado 24h
+        vol_24h_base  = vol_24h_token * price_avg  # volumen en moneda base del par
+
+        # Convertir a USD si la moneda base no es USD/USDT
+        base = pair.split('/')[-1] if '/' in pair else 'USD'
+        if base in ('USD', 'USDT'):
+            vol_24h_usd = vol_24h_base
+        elif base == 'EUR':
+            # Obtener tipo de cambio EUR/USD
+            try:
+                fx = requests.get('https://api.kraken.com/0/public/Ticker?pair=EURUSD', timeout=5).json()
+                eur_usd = float(list(fx['result'].values())[0]['c'][0])
+            except:
+                eur_usd = 1.08  # fallback
+            vol_24h_usd = vol_24h_base * eur_usd
+        elif base == 'GBP':
+            try:
+                fx = requests.get('https://api.kraken.com/0/public/Ticker?pair=GBPUSD', timeout=5).json()
+                gbp_usd = float(list(fx['result'].values())[0]['c'][0])
+            except:
+                gbp_usd = 1.27  # fallback
+            vol_24h_usd = vol_24h_base * gbp_usd
+        else:
+            # Para cualquier otra moneda base, intentar con USD directo
+            vol_24h_usd = vol_24h_base
+
+        change_24h = round((float(t['c'][0]) - float(t['o'])) / float(t['o']) * 100, 2)
+        high_24h   = float(t['h'][1])
+        low_24h    = float(t['l'][1])
         result = {
             'vol_24h_token': vol_24h_token,
-            'vol_24h_base': vol_24h_base,
+            'vol_24h_base': vol_24h_usd,   # siempre en USD
             'change_24h': change_24h,
             'high_24h': high_24h,
             'low_24h': low_24h
@@ -913,62 +938,90 @@ def filterPairs(wsnames, currency):
 
 def volumeInEUR(wsnames, pair, volume, eurPrices):
     """
-    Calcula el volumen en USD equivalente.
-    Para pares USD/USDT usa el volumen directo.
-    Para pares EUR convierte usando tipo de cambio.
-    Para otros intenta USD primero, luego EUR.
+    Calcula el volumen de la operación en USD.
+    Siempre devuelve USD independientemente de la moneda base del par.
     """
     token = pair.split("/")[0]
-    base  = pair.split("/")[1] if "/" in pair else ""
+    base  = pair.split("/")[1] if "/" in pair else "USD"
+    vol   = abs(float(volume))
 
-    # Si ya es USD o USDT — volumen directo (sin conversión)
+    # Factores de conversión a USD desde eurPrices
+    eur_usd = float(eurPrices.get("ZEURZUSD") or eurPrices.get("EURUSD") or 1.08)
+    gbp_usd = 1.27  # fallback GBP
+
+    # Par X/USD o X/USDT — volumen directo en USD
     if base in ("USD", "USDT"):
-        return abs(float(sum(pd.to_numeric([volume]) if not hasattr(volume, '__iter__') else volume) if hasattr(volume, '__iter__') else volume))
+        # El volumen ya está en tokens, multiplicar por precio
+        # price_to es el precio de cierre del trade en USD
+        try:
+            price = float(pd.to_numeric(pd.Series([0])).iloc[0])  # placeholder
+        except:
+            pass
+        # volumeInEUR recibe volume ya calculado como sum(qty*price) en tradeLoop
+        # aquí vol es qty total, necesitamos precio — lo tomamos del último precio del par
+        try:
+            tokenBase = token + "/USD"
+            pairKey = list(wsnames.keys())[list(wsnames.values()).index(tokenBase)]
+            price_usd = float(eurPrices.get(pairKey, 0))
+            if price_usd > 0:
+                return vol * price_usd
+        except:
+            pass
+        return vol  # ya en USD si no encontramos precio
 
-    # Si el par es X/EUR
+    # Par X/EUR — convertir a USD
     if base == "EUR":
         try:
-            # Convertir EUR a USD usando EURUSD
-            eur_usd = eurPrices.get("ZEURZUSD") or eurPrices.get("EURUSD") or 1.08
-            return abs(volume * float(eur_usd))
+            tokenBase = token + "/EUR"
+            pairKey = list(wsnames.keys())[list(wsnames.values()).index(tokenBase)]
+            price_eur = float(eurPrices.get(pairKey, 0))
+            if price_eur > 0:
+                return vol * price_eur * eur_usd
         except:
-            return abs(volume)
+            pass
+        return vol * eur_usd
 
-    # Si el token es USD (par USD/algo)
-    if token == "USD":
+    # Par X/GBP — convertir a USD
+    if base == "GBP":
         try:
-            return abs(1 / eurPrices["ZUSDZEUR"] * volume)
+            tokenBase = token + "/GBP"
+            pairKey = list(wsnames.keys())[list(wsnames.values()).index(tokenBase)]
+            price_gbp = float(eurPrices.get(pairKey, 0))
+            if price_gbp > 0:
+                return vol * price_gbp * gbp_usd
         except:
-            return abs(volume)
+            pass
+        return vol * gbp_usd
 
-    # Para cualquier otro par: intentar X/USD primero
-    try:
-        tokenBase = token + "/USD"
-        pairKey = list(wsnames.keys())[list(wsnames.values()).index(tokenBase)]
-        price_usd = eurPrices.get(pairKey, 0)
-        if price_usd:
-            return abs(price_usd * volume)
-    except:
-        pass
-
-    # Luego intentar X/EUR y convertir a USD
-    try:
-        tokenBase = token + "/EUR"
-        pairKey = list(wsnames.keys())[list(wsnames.values()).index(tokenBase)]
-        price_eur = eurPrices.get(pairKey, 0)
-        eur_usd = eurPrices.get("ZEURZUSD") or 1.08
-        if price_eur:
-            return abs(price_eur * float(eur_usd) * volume)
-    except:
-        pass
+    # Par USD/X (ej: USD/CHF) — vol es en USD directamente
+    if token == "USD":
+        return vol
 
     # ETH2.S especial
     if token == "ETH2.S":
         try:
             pairKey = list(wsnames.keys())[list(wsnames.values()).index("ETH/USD")]
-            return abs(volume * eurPrices[pairKey] * 0.96)
+            return vol * float(eurPrices[pairKey]) * 0.96
         except:
             pass
+
+    # Cualquier otro: buscar X/USD → X/EUR→USD → X/USDT
+    for quote in ["USD", "USDT"]:
+        try:
+            pairKey = list(wsnames.keys())[list(wsnames.values()).index(f"{token}/{quote}")]
+            price = float(eurPrices.get(pairKey, 0))
+            if price > 0:
+                return vol * price
+        except:
+            continue
+
+    try:
+        pairKey = list(wsnames.keys())[list(wsnames.values()).index(f"{token}/EUR")]
+        price_eur = float(eurPrices.get(pairKey, 0))
+        if price_eur > 0:
+            return vol * price_eur * eur_usd
+    except:
+        pass
 
     return 0
 
@@ -1104,7 +1157,50 @@ def tradeLoop(pairsList, wsnames, pairs, eurPrices, label):
                 priceDiff = abs(float((prices.iloc[0] - prices.iloc[-1]) * 100 / prices.iloc[0]))
                 pair = result[3]
                 volume = sum(pd.to_numeric(tradeDF["volume"]))
-                volInEUR = volumeInEUR(wsnames, pair, volume, local_eurPrices)  # USD equiv
+                # Volumen en USD = suma(cantidad × precio) para cada trade
+                # Esto da el volumen en la moneda base del par
+                vol_base = float(sum(
+                    pd.to_numeric(tradeDF["volume"]) * pd.to_numeric(tradeDF["price"])
+                ))
+                base = pair.split("/")[1] if "/" in pair else "USD"
+                token_sym = pair.split("/")[0] if "/" in pair else pair
+                eur_usd = float(local_eurPrices.get("ZEURZUSD") or local_eurPrices.get("EURUSD") or 1.08)
+                # Conversión a USD según moneda base del par
+                if base in ("USD", "USDT"):
+                    volInEUR = vol_base                  # ya en USD
+                elif base == "EUR":
+                    volInEUR = vol_base * eur_usd        # EUR → USD
+                elif base == "GBP":
+                    # Obtener GBP/USD de eurPrices si existe, sino fallback
+                    try:
+                        gbp_key = list(local_eurPrices.keys())[
+                            [k for k in local_eurPrices.keys() if 'GBP' in k and 'USD' in k].__getitem__(0)
+                            if [k for k in local_eurPrices.keys() if 'GBP' in k and 'USD' in k] else 0
+                        ]
+                        gbp_usd = float(local_eurPrices[gbp_key])
+                    except:
+                        gbp_usd = 1.27
+                    volInEUR = vol_base * gbp_usd        # GBP → USD
+                elif base == "XBT" or base == "BTC":
+                    # Par pagado en BTC — convertir BTC a USD
+                    try:
+                        btc_key = list(local_eurPrices.keys())[
+                            next(i for i,k in enumerate(local_eurPrices.keys()) if 'XBT' in k and 'USD' in k)
+                        ]
+                        btc_usd = float(local_eurPrices[btc_key])
+                        volInEUR = vol_base * btc_usd
+                    except:
+                        volInEUR = vol_base * 60000  # fallback BTC precio
+                elif base == "ETH":
+                    try:
+                        eth_key = next(k for k in local_eurPrices.keys() if 'ETH' in k and 'USD' in k)
+                        eth_usd = float(local_eurPrices[eth_key])
+                        volInEUR = vol_base * eth_usd
+                    except:
+                        volInEUR = vol_base * 3000  # fallback ETH precio
+                else:
+                    # Para cualquier otra moneda base: intentar convertir via EUR/USD
+                    volInEUR = vol_base * eur_usd
                 if(priceDiff > 2 and volInEUR > 15000):  # volInEUR es realmente vol en USD equivalente
                     priceDiff = round(priceDiff, 3)
                     print(f"\U0001F433 [{label}]", priceDiff, pair)
