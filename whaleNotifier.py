@@ -77,6 +77,13 @@ def init_db():
 
 db_lock = threading.Lock()
 
+# Contador de señales recientes por par — para la alerta Twilio
+from collections import defaultdict
+_recent_signals = defaultdict(list)  # pair -> [timestamps]
+_recent_lock = threading.Lock()
+RAFAGA_WINDOW_MIN = 1440  # ventana de tiempo en minutos (24h)
+RAFAGA_MIN_COUNT  = 3    # señales mínimas para disparar llamada
+
 def save_signal(tradeDF, pair, volInEUR, priceDiff):
     try:
         with db_lock:
@@ -1133,6 +1140,19 @@ def telegram_bot_sendtext(bot_message):
     response = requests.post(url, params=params)
     return response.json()
 
+
+def twilio_llamada(pair, priceDiff, volInEUR):
+    """Dispara una llamada de alerta via Twilio cuando hay señal importante."""
+    try:
+        r = requests.get(
+            'https://alertastrading-2306.twil.io/llamada-bot',
+            params={'pair': pair, 'diff': priceDiff, 'vol': round(volInEUR, 0)},
+            timeout=10
+        )
+        print(f"📞 Llamada Twilio [{pair}]: {r.status_code}")
+    except Exception as e:
+        print(f"⚠️ Error Twilio: {e}")
+
 def tradeLoop(pairsList, wsnames, pairs, eurPrices, label):
     print(f"[{label}] Conectando {len(pairsList)} pares...")
     ws = connectToWS(pairsList)
@@ -1222,6 +1242,21 @@ def tradeLoop(pairsList, wsnames, pairs, eurPrices, label):
                     else:
                         TGmsg = createTGmessage(tradeDF, pair, volInEUR, priceDiff, wsnames, pairs, ticker)
                         telegram_bot_sendtext(TGmsg)
+                        # Actualizar contador de señales recientes y disparar Twilio si aplica
+                        now_ts = datetime.utcnow()
+                        with _recent_lock:
+                            _recent_signals[pair].append(now_ts)
+                            # Limpiar señales fuera de la ventana
+                            cutoff = now_ts - __import__('datetime').timedelta(minutes=RAFAGA_WINDOW_MIN)
+                            _recent_signals[pair] = [t for t in _recent_signals[pair] if t > cutoff]
+                            count_recent = len(_recent_signals[pair])
+                        print(f"📊 [{label}] {pair} — {count_recent} señales en {RAFAGA_WINDOW_MIN}min")
+                        if count_recent >= RAFAGA_MIN_COUNT:
+                            threading.Thread(
+                                target=twilio_llamada,
+                                args=(pair, priceDiff, volInEUR),
+                                daemon=True
+                            ).start()
                 else:
                     print(".", end="", flush=True)
             if(datetime.now().second == 0):
