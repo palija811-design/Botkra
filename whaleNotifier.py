@@ -158,8 +158,8 @@ def get_ticker_24h(pair):
             return None
         t = list(result.values())[0]
         vol_24h_token = float(t['v'][1])          # tokens operados en 24h
-        price_avg     = float(t['p'][1])           # precio medio ponderado 24h
-        vol_24h_base  = vol_24h_token * price_avg  # volumen en moneda base del par
+        price_last    = float(t['c'][0])           # último precio (igual que Kraken Pro)
+        vol_24h_base  = vol_24h_token * price_last # volumen en moneda base del par
 
         # Convertir a USD si la moneda base no es USD/USDT
         base = pair.split('/')[-1] if '/' in pair else 'USD'
@@ -184,7 +184,10 @@ def get_ticker_24h(pair):
             # Para cualquier otra moneda base, intentar con USD directo
             vol_24h_usd = vol_24h_base
 
-        change_24h = round((float(t['c'][0]) - float(t['o'])) / float(t['o']) * 100, 2)
+        # Cambio 24h rodante: precio actual vs VWAP 24h (igual que Kraken Pro)
+        price_now  = float(t['c'][0])   # último precio
+        vwap_24h   = float(t['p'][1])   # precio medio ponderado últimas 24h
+        change_24h = round((price_now - vwap_24h) / vwap_24h * 100, 2)
         high_24h   = float(t['h'][1])
         low_24h    = float(t['l'][1])
         result = {
