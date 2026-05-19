@@ -1109,11 +1109,20 @@ def tradeLoop(pairsList, wsnames, pairs, eurPrices, label):
                     priceDiff = round(priceDiff, 3)
                     print(f"\U0001F433 [{label}]", priceDiff, pair)
                     entry_price = float(tradeDF["price"].iloc[-1])
+                    # Guardar siempre en BD para análisis
                     signal_id = save_signal(tradeDF, pair, volInEUR, priceDiff)
                     launch_tracker(signal_id, pair, entry_price)
+                    # Guardar siempre — enviar a TG solo si vol 24h > 50K$
                     ticker = get_ticker_24h(pair)
-                    TGmsg = createTGmessage(tradeDF, pair, volInEUR, priceDiff, wsnames, pairs, ticker)
-                    telegram_bot_sendtext(TGmsg)
+                    vol_24h = ticker['vol_24h_base'] if ticker else None
+                    if vol_24h is None:
+                        # No se pudo obtener el volumen — omitir por seguridad
+                        print(f"⏭ [{label}] {pair} omitido — no se pudo obtener vol 24h")
+                    elif vol_24h < 50000:
+                        print(f"⏭ [{label}] {pair} omitido — vol 24h: {round(vol_24h,0):,.0f}$ < 50K$")
+                    else:
+                        TGmsg = createTGmessage(tradeDF, pair, volInEUR, priceDiff, wsnames, pairs, ticker)
+                        telegram_bot_sendtext(TGmsg)
                 else:
                     print(".", end="", flush=True)
             if(datetime.now().second == 0):
