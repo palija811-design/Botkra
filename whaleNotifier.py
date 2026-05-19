@@ -1069,33 +1069,65 @@ def filterPairs(wsnames, currency):
     return(filtered)
 
 def volumeInEUR(wsnames, pair, volume, eurPrices):
+    """
+    Calcula el volumen en USD equivalente.
+    Para pares USD/USDT usa el volumen directo.
+    Para pares EUR convierte usando tipo de cambio.
+    Para otros intenta USD primero, luego EUR.
+    """
     token = pair.split("/")[0]
-    if (token == "EUR"):
-        volInEUR = abs(volume)
-    elif (token == "ETH2.S"):
-        tokenBase = "ETH" + "/EUR"
-        pairToNonKraken = list(wsnames.keys())[list(wsnames.values()).index(tokenBase)]
-        volInEUR = abs(volume * eurPrices[pairToNonKraken] * 0.96)
-    else:
-        tokenBase = token + "/EUR"
+    base  = pair.split("/")[1] if "/" in pair else ""
+
+    # Si ya es USD o USDT — volumen directo (sin conversión)
+    if base in ("USD", "USDT"):
+        return abs(float(sum(pd.to_numeric([volume]) if not hasattr(volume, '__iter__') else volume) if hasattr(volume, '__iter__') else volume))
+
+    # Si el par es X/EUR
+    if base == "EUR":
         try:
-            pairToNonKraken = list(wsnames.keys())[list(wsnames.values()).index(tokenBase)]
-            volInEUR = abs(eurPrices[pairToNonKraken] * volume)
+            # Convertir EUR a USD usando EURUSD
+            eur_usd = eurPrices.get("ZEURZUSD") or eurPrices.get("EURUSD") or 1.08
+            return abs(volume * float(eur_usd))
         except:
-            try:
-                if(token == "USD"):
-                    volInEUR = abs(1/eurPrices["ZUSDZEUR"] * volume)
-                else:
-                    tokenBase = token + "/USD"
-                    pairToNonKraken = list(wsnames.keys())[list(wsnames.values()).index(tokenBase)]
-                    volInEUR = abs(eurPrices[pairToNonKraken] * volume)
-            except:
-                try:
-                    tokenBase = token + "EUR"
-                    volInEUR = abs(eurPrices[tokenBase] * volume)
-                except:
-                    volInEUR = 0
-    return(volInEUR)
+            return abs(volume)
+
+    # Si el token es USD (par USD/algo)
+    if token == "USD":
+        try:
+            return abs(1 / eurPrices["ZUSDZEUR"] * volume)
+        except:
+            return abs(volume)
+
+    # Para cualquier otro par: intentar X/USD primero
+    try:
+        tokenBase = token + "/USD"
+        pairKey = list(wsnames.keys())[list(wsnames.values()).index(tokenBase)]
+        price_usd = eurPrices.get(pairKey, 0)
+        if price_usd:
+            return abs(price_usd * volume)
+    except:
+        pass
+
+    # Luego intentar X/EUR y convertir a USD
+    try:
+        tokenBase = token + "/EUR"
+        pairKey = list(wsnames.keys())[list(wsnames.values()).index(tokenBase)]
+        price_eur = eurPrices.get(pairKey, 0)
+        eur_usd = eurPrices.get("ZEURZUSD") or 1.08
+        if price_eur:
+            return abs(price_eur * float(eur_usd) * volume)
+    except:
+        pass
+
+    # ETH2.S especial
+    if token == "ETH2.S":
+        try:
+            pairKey = list(wsnames.keys())[list(wsnames.values()).index("ETH/USD")]
+            return abs(volume * eurPrices[pairKey] * 0.96)
+        except:
+            pass
+
+    return 0
 
 def anotateVolume(x):
     x = pd.to_numeric(x)
@@ -1231,8 +1263,8 @@ def tradeLoop(pairsList, wsnames, pairs, eurPrices, label):
                 priceDiff = abs(float((prices.iloc[0] - prices.iloc[-1]) * 100 / prices.iloc[0]))
                 pair = result[3]
                 volume = sum(pd.to_numeric(tradeDF["volume"]))
-                volInEUR = volumeInEUR(wsnames, pair, volume, local_eurPrices)
-                if(volInEUR == 0 or priceDiff > 2 and volInEUR > 15000):
+                volInEUR = volumeInEUR(wsnames, pair, volume, local_eurPrices)  # USD equiv
+                if(priceDiff > 2 and volInEUR > 15000):  # volInEUR es realmente vol en USD equivalente
                     priceDiff = round(priceDiff, 3)
                     print(f"\U0001F433 [{label}]", priceDiff, pair)
                     entry_price = float(tradeDF["price"].iloc[-1])
