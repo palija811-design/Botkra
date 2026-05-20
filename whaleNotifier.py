@@ -148,6 +148,71 @@ _ticker_cache = {}
 _ticker_cache_time = {}
 TICKER_CACHE_TTL = 300  # 5 minutos
 
+# Cache CoinGecko 7d
+_cg_cache = {}
+_cg_cache_time = {}
+CG_CACHE_TTL = 3600  # 1 hora
+
+KRAKEN_TO_CG = {
+    "XBT":"bitcoin","BTC":"bitcoin","ETH":"ethereum","XRP":"ripple",
+    "ADA":"cardano","SOL":"solana","DOT":"polkadot","DOGE":"dogecoin",
+    "AVAX":"avalanche-2","MATIC":"matic-network","POL":"matic-network",
+    "LINK":"chainlink","UNI":"uniswap","ATOM":"cosmos","LTC":"litecoin",
+    "BCH":"bitcoin-cash","ALGO":"algorand","XLM":"stellar","NEAR":"near",
+    "FTM":"fantom","SAND":"the-sandbox","MANA":"decentraland",
+    "AAVE":"aave","DASH":"dash","EOS":"eos","TRX":"tron",
+    "FIL":"filecoin","ETC":"ethereum-classic","ZEC":"zcash","XMR":"monero",
+    "HYPE":"hyperliquid","ASRR":"assister",
+}
+
+def get_coingecko_id(token):
+    t = token.upper()
+    if t in KRAKEN_TO_CG:
+        return KRAKEN_TO_CG[t]
+    try:
+        r = requests.get(f"https://api.coingecko.com/api/v3/search?query={t}", timeout=8)
+        if r.status_code == 200:
+            for coin in r.json().get("coins", []):
+                if coin.get("symbol","").upper() == t:
+                    return coin["id"]
+    except Exception:
+        pass
+    return t.lower()
+
+def get_7d_change(pair):
+    import time as _time
+    token = pair.split("/")[0] if "/" in pair else pair
+    for suffix in [".S",".P",".M","2"]:
+        token = token.replace(suffix, "")
+    key = "7d_" + token
+    now = _time.time()
+    if key in _cg_cache and now - _cg_cache_time.get(key, 0) < CG_CACHE_TTL:
+        return _cg_cache[key]
+    try:
+        cg_id = get_coingecko_id(token)
+        url = f"https://api.coingecko.com/api/v3/simple/price?ids={cg_id}&vs_currencies=usd&include_7d_change=true"
+        r = requests.get(url, timeout=8)
+        if r.status_code == 200:
+            data = r.json().get(cg_id, {})
+            c7 = data.get("usd_7d_change")
+            if c7 is not None:
+                result = round(c7, 2)
+                _cg_cache[key] = result
+                _cg_cache_time[key] = now
+                return result
+    except Exception as e:
+        print(f"CoinGecko err {pair}: {e}")
+    return None
+
+def get_cmc_url(token):
+    t = token.upper()
+    for suffix in [".S",".P",".M","2"]:
+        t = t.replace(suffix, "")
+    if t == "XBT":
+        t = "BTC"
+    return "https://coinmarketcap.com/currencies/" + t.lower() + "/"
+
+
 def get_ticker_24h(pair):
     """Obtiene volumen 24h y cambio 24h de Kraken. Con caché de 5 minutos."""
     import time as _time
@@ -324,7 +389,7 @@ tr:hover td{background:var(--surface)}
 .badge-count{background:#00d4ff15;color:var(--accent);border:1px solid var(--accent)}
 .badge-side-b{background:#00ff8815;color:var(--green);border:1px solid var(--green)}
 .badge-side-s{background:#ff446615;color:var(--red);border:1px solid var(--red)}
-.card-metrics{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0;border-bottom:1px solid var(--border)}
+.card-metrics{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:0;border-bottom:1px solid var(--border)}
 .card-metric{padding:0.6rem 0.8rem;border-right:1px solid var(--border)}
 .card-metric:last-child{border-right:none}
 .card-metric-label{font-size:0.56rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.07em}
@@ -604,13 +669,18 @@ async function loadAnalizar(){
           <div class="card-metric-value ${changeClass}">${t.change_24h!==undefined?(t.change_24h>0?'+':'')+t.change_24h+'%':'—'}</div>
         </div>
         <div class="card-metric">
+          <div class="card-metric-label">Cambio 7d</div>
+          <div class="card-metric-value ${g.change_7d>0?'pos':g.change_7d<0?'neg':'muted'}">${g.change_7d!==null&&g.change_7d!==undefined?(g.change_7d>0?'+':'')+g.change_7d+'%':'—'}</div>
+        </div>
+        <div class="card-metric">
           <div class="card-metric-label">Vol 24h</div>
           <div class="card-metric-value vol">${t.vol_24h_base!==undefined?fmt(t.vol_24h_base)+'$':'—'}</div>
         </div>
       </div>
       <div class="card-signals">${signalRows}</div>
       <div class="card-footer">
-        <a href="${kUrl}" target="_blank" class="kraken-btn">📊 Ver en Kraken Pro</a>
+        <a href="${kUrl}" target="_blank" class="kraken-btn">📊 Kraken</a>
+        <a href="${g.cmc_url}" target="_blank" class="kraken-btn" style="background:#0d1f3c;border-color:#1a4080">🌐 CMC</a>
         <button class="btn-sm" onclick="goToPar('${g.pair}')">🔍 Historial</button>
       </div>
     </div>`;
@@ -782,7 +852,7 @@ def api_tracking(signal_id):
 @app.route('/api/analizar')
 def api_analizar():
     from datetime import datetime, timedelta
-    from collections import defaultdict, Counter
+    from collections import defaultdict
     window_min  = int(flask_request.args.get('window', 60))
     min_signals = int(flask_request.args.get('min', 2))
     since = (datetime.utcnow() - timedelta(minutes=window_min)).isoformat()
@@ -801,6 +871,7 @@ def api_analizar():
         diffs = [s['price_diff_pct'] for s in sigs]
         vols  = [s['volume_eur'] for s in sigs]
         t_last = sigs[-1]['timestamp']
+        token = pair.split('/')[0] if '/' in pair else pair
         result.append({
             'pair': pair,
             'count': len(sigs),
@@ -808,7 +879,9 @@ def api_analizar():
             'avg_diff': round(sum(diffs)/len(diffs), 2),
             'total_vol': round(sum(vols), 0),
             'last_signal': t_last,
-            'signals': sigs
+            'signals': sigs,
+            'change_7d': get_7d_change(pair),
+            'cmc_url': get_cmc_url(token)
         })
     result.sort(key=lambda x: x['last_signal'], reverse=True)
     return jsonify(result)
@@ -1124,15 +1197,25 @@ def createTGmessage(tradeDF, pair, volInEUR, priceDiff, wsnames, pairs, ticker=N
         marginMessage = f"\n`/add {tokenNormalized} {baseNormalized} {size} {direction} {distanceTrade} {distanceTolerance} {setmaxLeverage}`"
     else:
         marginMessage = ""
-    # Linea 24h ticker
+    # Linea 24h + 7d + CMC
+    token_clean = tokenNormalized
+    cmc_url = get_cmc_url(token_clean)
     if ticker:
-        change_emoji = '📈' if ticker['change_24h'] > 0 else '📉'
+        change_emoji_24 = '📈' if ticker['change_24h'] > 0 else '📉'
         base_token = pair.split('/')[1] if '/' in pair else ''
         vol24_annotated = anotateVolume(round(max(ticker['vol_24h_base'], 1), 0))
-        quintaLinea = f"\n{change_emoji} 24h: *{ticker['change_24h']:+.2f}%* | Vol 24h: {vol24_annotated} {base_token}"
+        change_7d = get_7d_change(pair)
+        if change_7d is not None:
+            emoji_7d = '📈' if change_7d > 0 else '📉'
+            line_7d = f" | {emoji_7d} 7d: *{change_7d:+.2f}%*"
+        else:
+            line_7d = ""
+        quintaLinea = f"\n{change_emoji_24} 24h: *{ticker['change_24h']:+.2f}%* | Vol: {vol24_annotated}${line_7d}"
+        sextaLinea = f"\n[📊 CoinMarketCap]({cmc_url})"
     else:
         quintaLinea = ""
-    return f"{primeraLinea} {segundaLinea} {terceraLinea}{quintaLinea} {marginMessage}"
+        sextaLinea = f"\n[📊 CoinMarketCap]({cmc_url})"
+    return f"{primeraLinea} {segundaLinea} {terceraLinea}{quintaLinea}{sextaLinea} {marginMessage}"
 
 def telegram_bot_sendtext(bot_message):
     url = f'https://api.telegram.org/bot{bot_token}/sendMessage'
