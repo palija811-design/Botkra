@@ -191,7 +191,7 @@ def get_7d_change(pair):
     try:
         cg_id = get_coingecko_id(token)
         url = f"https://api.coingecko.com/api/v3/simple/price?ids={cg_id}&vs_currencies=usd&include_7d_change=true"
-        r = requests.get(url, timeout=8)
+        r = requests.get(url, timeout=5)
         if r.status_code == 200:
             data = r.json().get(cg_id, {})
             c7 = data.get("usd_7d_change")
@@ -222,7 +222,7 @@ def get_ticker_24h(pair):
     try:
         pair_clean = pair.replace('/', '')
         url = f'https://api.kraken.com/0/public/Ticker?pair={pair_clean}'
-        r = requests.get(url, timeout=8)
+        r = requests.get(url, timeout=5)
         if r.status_code != 200:
             return None
         result = r.json().get('result', {})
@@ -1159,7 +1159,7 @@ def receiveSafeWS(ws):
     WSsource = "Primary" if source == 0 else "Backup"
     print("WebSocket {}):".format(WSsource))
 
-def createTGmessage(tradeDF, pair, volInEUR, priceDiff, wsnames, pairs, ticker=None):
+def createTGmessage(tradeDF, pair, volInEUR, priceDiff, wsnames, pairs, ticker=None, change_7d=None):
     pairTB = pair.replace("/", "")
     primeraLinea = f"#{pairTB}"
     token = pair.split("/")[0]
@@ -1204,7 +1204,6 @@ def createTGmessage(tradeDF, pair, volInEUR, priceDiff, wsnames, pairs, ticker=N
         change_emoji_24 = '📈' if ticker['change_24h'] > 0 else '📉'
         base_token = pair.split('/')[1] if '/' in pair else ''
         vol24_annotated = anotateVolume(round(max(ticker['vol_24h_base'], 1), 0))
-        change_7d = get_7d_change(pair)
         if change_7d is not None:
             emoji_7d = '📈' if change_7d > 0 else '📉'
             line_7d = f" | {emoji_7d} 7d: *{change_7d:+.2f}%*"
@@ -1323,8 +1322,12 @@ def tradeLoop(pairsList, wsnames, pairs, eurPrices, label):
                     elif vol_24h < 50000:
                         print(f"⏭ [{label}] {pair} omitido — vol 24h: {round(vol_24h,0):,.0f}$ < 50K$")
                     else:
-                        TGmsg = createTGmessage(tradeDF, pair, volInEUR, priceDiff, wsnames, pairs, ticker)
+                        # Obtener 7d del cache (no bloquea si ya está cacheado)
+                        c7d = _cg_cache.get("7d_" + pair.split("/")[0].replace(".S","").replace(".P",""))
+                        TGmsg = createTGmessage(tradeDF, pair, volInEUR, priceDiff, wsnames, pairs, ticker, c7d)
                         telegram_bot_sendtext(TGmsg)
+                        # Actualizar cache 7d en hilo separado para la proxima señal
+                        threading.Thread(target=get_7d_change, args=(pair,), daemon=True).start()
                         # Actualizar contador de señales recientes y disparar Twilio si aplica
                         now_ts = datetime.utcnow()
                         with _recent_lock:
