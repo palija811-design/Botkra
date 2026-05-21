@@ -210,7 +210,7 @@ def get_cmc_url(token):
         t = t.replace(suffix, "")
     if t == "XBT":
         t = "BTC"
-    return "https://coinmarketcap.com/currencies/" + t.lower() + "/"
+    return "https://www.coingecko.com/en/coins/" + get_coingecko_id(t)
 
 
 def get_ticker_24h(pair):
@@ -680,7 +680,7 @@ async function loadAnalizar(){
       <div class="card-signals">${signalRows}</div>
       <div class="card-footer">
         <a href="${kUrl}" target="_blank" class="kraken-btn">📊 Kraken</a>
-        <a href="${g.cmc_url}" target="_blank" class="kraken-btn" style="background:#0d1f3c;border-color:#1a4080">🌐 CMC</a>
+        <a href="${g.cmc_url}" target="_blank" class="kraken-btn" style="background:#0d1f3c;border-color:#1a4080">🦎 CoinGecko</a>
         <button class="btn-sm" onclick="goToPar('${g.pair}')">🔍 Historial</button>
       </div>
     </div>`;
@@ -1210,10 +1210,10 @@ def createTGmessage(tradeDF, pair, volInEUR, priceDiff, wsnames, pairs, ticker=N
         else:
             line_7d = ""
         quintaLinea = f"\n{change_emoji_24} 24h: *{ticker['change_24h']:+.2f}%* | Vol: {vol24_annotated}${line_7d}"
-        sextaLinea = f"\n[📊 CoinMarketCap]({cmc_url})"
+        sextaLinea = f"\n[📊 CoinGecko]({cmc_url})"
     else:
         quintaLinea = ""
-        sextaLinea = f"\n[📊 CoinMarketCap]({cmc_url})"
+        sextaLinea = f"\n[📊 CoinGecko]({cmc_url})"
     return f"{primeraLinea} {segundaLinea} {terceraLinea}{quintaLinea}{sextaLinea} {marginMessage}"
 
 def telegram_bot_sendtext(bot_message):
@@ -1323,7 +1323,9 @@ def tradeLoop(pairsList, wsnames, pairs, eurPrices, label):
                         print(f"⏭ [{label}] {pair} omitido — vol 24h: {round(vol_24h,0):,.0f}$ < 50K$")
                     else:
                         # Obtener 7d del cache (no bloquea si ya está cacheado)
-                        c7d = _cg_cache.get("7d_" + pair.split("/")[0].replace(".S","").replace(".P",""))
+                        _tok = pair.split("/")[0] if "/" in pair else pair
+                        for _s in [".S",".P",".M","2"]: _tok = _tok.replace(_s,"")
+                        c7d = _cg_cache.get("7d_" + _tok)
                         TGmsg = createTGmessage(tradeDF, pair, volInEUR, priceDiff, wsnames, pairs, ticker, c7d)
                         telegram_bot_sendtext(TGmsg)
                         # Actualizar cache 7d en hilo separado para la proxima señal
