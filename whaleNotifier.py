@@ -243,7 +243,7 @@ Factores CLAVE a valorar en orden de importancia:
 7. SUPPLY: circulating/total alto = menos presión vendedora futura
 8. HORA DE LA SEÑAL: señales en horario europeo/americano más fiables
 
-Responde SOLO con el JSON, sin texto adicional."""
+Responde SOLO con el JSON puro, sin backticks, sin texto adicional, sin markdown."""
 
 SYSTEM_TECNICO = """Eres un analista experto en análisis técnico de criptomonedas especializado en detección de mechazos institucionales.
 Tu objetivo es evaluar señales de movimientos bruscos de ballenas para determinar si son oportunidades de entrada.
@@ -270,7 +270,7 @@ Factores CLAVE en orden de importancia:
 Estrategia de mecho: la ballena empuja el precio extremo, nosotros ponemos orden límite en ese nivel esperando reversión.
 Score alto = alta probabilidad de que el precio vuelva al nivel del mecho.
 
-Responde SOLO con el JSON, sin texto adicional."""
+Responde SOLO con el JSON puro, sin backticks, sin texto adicional, sin markdown."""
 
 
 def get_coingecko_full(pair):
@@ -384,6 +384,8 @@ Devuelve el JSON con score y resumen."""
         )
         if r.status_code == 200:
             text = r.json()["content"][0]["text"].strip()
+            # Limpiar backticks de markdown si los hay
+            text = text.replace("```json","").replace("```","").strip()
             data = _json.loads(text)
             result = {"score": float(data["score"]), "resumen": data.get("resumen", "")}
             _ai_score_cache[cache_key] = result
@@ -441,6 +443,8 @@ Devuelve el JSON con score y resumen."""
         )
         if r.status_code == 200:
             text = r.json()["content"][0]["text"].strip()
+            # Limpiar backticks de markdown si los hay
+            text = text.replace("```json","").replace("```","").strip()
             data = _json.loads(text)
             result = {"score": float(data["score"]), "resumen": data.get("resumen", "")}
             _ai_score_cache[cache_key] = result
