@@ -222,46 +222,100 @@ _ai_score_cache_time = {}
 AI_CACHE_TTL = 3600  # 1 hora por par
 
 SYSTEM_FUNDAMENTAL = """Eres un analista experto en análisis fundamental de criptomonedas.
-Tu objetivo es evaluar proyectos crypto basándote en datos de mercado disponibles.
+Tu objetivo es evaluar proyectos crypto basándote exclusivamente en datos de mercado cuantitativos.
 Cuando recibas datos de un token, devuelve SOLO un JSON con este formato exacto:
 {"score": 7.5, "resumen": "Texto breve de máximo 15 palabras explicando el score"}
 
 El score va de 1 a 10 donde:
-- 1-3: Proyecto de muy bajo valor, especulativo o dudoso
-- 4-5: Proyecto mediocre o sin diferenciación clara
-- 6-7: Proyecto interesante con potencial moderado
-- 8-9: Proyecto sólido con buenos fundamentos
-- 10: Proyecto excepcional
+- 1-3: Proyecto especulativo, manipulado o sin liquidez real
+- 4-5: Proyecto mediocre, sin tracción clara
+- 6-7: Proyecto interesante con fundamentos moderados
+- 8-9: Proyecto sólido con buena liquidez y tendencia
+- 10: Proyecto excepcional con todos los indicadores positivos
 
-Factores a valorar:
-- Volumen 24h alto relativo al proyecto = positivo
-- Volumen 7d consistente = positivo
-- Cambio 24h y 7d positivos = positivo
-- Tokens muy pequeños con poco volumen = negativo
-- Consistencia entre volúmenes = positivo
+Factores CLAVE a valorar en orden de importancia:
+1. LIQUIDEZ: Vol24h/MarketCap > 0.1 = excelente, > 0.05 = bueno, < 0.01 = bajo
+2. TENDENCIA: Cambio 30d y 7d positivos y crecientes = positivo
+3. DISTANCIA AL ATH: cerca del ATH = posible resistencia; lejos = potencial upside
+4. RANKING: Top 100 = más fiable, Top 500 = moderado, fuera Top 1000 = especulativo
+5. ANTIGÜEDAD: proyecto con fecha genesis = más fiable que sin datos
+6. SENTIMIENTO: >60% positivo = bueno
+7. SUPPLY: circulating/total alto = menos presión vendedora futura
+8. HORA DE LA SEÑAL: señales en horario europeo/americano más fiables
 
 Responde SOLO con el JSON, sin texto adicional."""
 
-SYSTEM_TECNICO = """Eres un analista experto en análisis técnico de criptomonedas.
-Tu objetivo es evaluar señales de trading basándote en movimientos de precio y volumen.
-Cuando recibas datos de una señal de ballena, devuelve SOLO un JSON con este formato exacto:
+SYSTEM_TECNICO = """Eres un analista experto en análisis técnico de criptomonedas especializado en detección de mechazos institucionales.
+Tu objetivo es evaluar señales de movimientos bruscos de ballenas para determinar si son oportunidades de entrada.
+Cuando recibas datos de una señal, devuelve SOLO un JSON con este formato exacto:
 {"score": 7.5, "resumen": "Texto breve de máximo 15 palabras explicando el score"}
 
 El score va de 1 a 10 donde:
-- 1-3: Señal débil, poco fiable o en tendencia contraria
+- 1-3: Señal de baja calidad, probable manipulación o sin contexto favorable
 - 4-5: Señal moderada, contexto mixto
-- 6-7: Señal interesante con buen contexto técnico
-- 8-9: Señal fuerte con alta probabilidad de continuación o reversión
-- 10: Señal excepcional con múltiples confirmaciones
+- 6-7: Mecho interesante con probabilidad de reversión moderada
+- 8-9: Mecho fuerte con alta probabilidad de reversión o continuación
+- 10: Señal excepcional con todas las confirmaciones
 
-Factores a valorar:
-- Movimiento >5% = señal fuerte
-- Volumen de operación alto = confirmación
-- Múltiples señales del mismo par en poco tiempo = acumulación/distribución
-- Lado BUY con tendencia semanal alcista = positivo
-- Lado SELL en zona de resistencia = potencial reversión bajista
+Factores CLAVE en orden de importancia:
+1. INTENSIDAD: >10% = muy fuerte, >5% = fuerte, 2-5% = moderado
+2. VOLUMEN RELATIVO: vol_señal/vol_24h. >5% = institucional, >1% = relevante
+3. REPETICIÓN: 3+ señales en 7 días = patrón establecido (muy positivo)
+4. LADO + PRECIO: SELL cuando precio cerca del HIGH 24h = resistencia clara (reversión alcista probable)
+         BUY cuando precio cerca del LOW 24h = soporte claro (reversión bajista probable)
+5. HORA: 08-12 UTC y 14-20 UTC = horario de mayor liquidez = señal más fiable
+6. VELOCIDAD: múltiples señales en <30min = acumulación/distribución activa
+7. CONSISTENCIA: mismo lado repetido = convicción direccional
+
+Estrategia de mecho: la ballena empuja el precio extremo, nosotros ponemos orden límite en ese nivel esperando reversión.
+Score alto = alta probabilidad de que el precio vuelva al nivel del mecho.
 
 Responde SOLO con el JSON, sin texto adicional."""
+
+
+def get_coingecko_full(pair):
+    """Obtiene datos completos de CoinGecko para el agente fundamental."""
+    import time as _time
+    token = pair.split("/")[0] if "/" in pair else pair
+    for s in [".S",".P",".M","2"]: token = token.replace(s,"")
+    cache_key = f"cg_full_{token}"
+    now = _time.time()
+    if cache_key in _cg_cache and now - _cg_cache_time.get(cache_key,0) < 3600:
+        return _cg_cache[cache_key]
+    try:
+        cg_id = get_coingecko_id(token)
+        url = (f"https://api.coingecko.com/api/v3/coins/{cg_id}"
+               f"?localization=false&tickers=false&market_data=true"
+               f"&community_data=false&developer_data=false")
+        r = requests.get(url, timeout=8)
+        if r.status_code != 200:
+            return {}
+        d = r.json()
+        md = d.get("market_data", {})
+        result = {
+            "name":           d.get("name", token),
+            "categories":     d.get("categories", [])[:3],
+            "market_cap_usd": md.get("market_cap",{}).get("usd"),
+            "vol_24h_usd":    md.get("total_volume",{}).get("usd"),
+            "price_usd":      md.get("current_price",{}).get("usd"),
+            "ath_usd":        md.get("ath",{}).get("usd"),
+            "ath_change_pct": md.get("ath_change_percentage",{}).get("usd"),
+            "rank":           md.get("market_cap_rank"),
+            "change_7d":      md.get("price_change_percentage_7d"),
+            "change_30d":     md.get("price_change_percentage_30d"),
+            "high_24h":       md.get("high_24h",{}).get("usd"),
+            "low_24h":        md.get("low_24h",{}).get("usd"),
+            "circulating_supply": md.get("circulating_supply"),
+            "total_supply":   md.get("total_supply"),
+            "genesis_date":   d.get("genesis_date"),
+            "sentiment_up":   d.get("sentiment_votes_up_percentage"),
+        }
+        _cg_cache[cache_key] = result
+        _cg_cache_time[cache_key] = now
+        return result
+    except Exception as e:
+        print(f"CoinGecko full error {pair}: {e}")
+        return {}
 
 
 def ai_fundamental_score(pair, ticker, change_7d):
@@ -278,13 +332,38 @@ def ai_fundamental_score(pair, ticker, change_7d):
         vol_24h = ticker.get("vol_24h_base", 0) if ticker else 0
         vol_7d  = ticker.get("vol_7d_usd", 0) if ticker else 0
         chg_24h = ticker.get("change_24h", 0) if ticker else 0
-        prompt = f"""Analiza este token crypto:
-- Par: {pair}
-- Token: {token}
-- Cambio 24h: {chg_24h}%
-- Cambio 7d: {change_7d if change_7d is not None else 'desconocido'}%
-- Volumen 24h: {vol_24h:,.0f} USD
+
+        # Obtener datos completos de CoinGecko
+        cg = get_coingecko_full(pair)
+        mktcap  = cg.get("market_cap_usd") or 0
+        rank    = cg.get("rank") or "desconocido"
+        chg_30d = cg.get("change_30d")
+        ath_pct = cg.get("ath_change_pct")
+        sent    = cg.get("sentiment_up")
+        circ    = cg.get("circulating_supply")
+        total   = cg.get("total_supply")
+        genesis = cg.get("genesis_date") or "desconocida"
+        cats    = ", ".join(cg.get("categories", [])) or "desconocida"
+        liq_ratio = round(vol_24h / mktcap * 100, 2) if mktcap and mktcap > 0 else None
+        supply_pct = round(circ / total * 100, 1) if circ and total and total > 0 else None
+
+        from datetime import datetime
+        hora_utc = datetime.utcnow().hour
+
+        prompt = f"""Analiza este token crypto con datos completos:
+- Par: {pair} | Nombre: {cg.get("name", token)}
+- Categorías: {cats}
+- Ranking CoinGecko: #{rank}
+- Precio actual: {cg.get("price_usd") or "desconocido"} USD
+- Market Cap: {mktcap:,.0f} USD
+- Volumen 24h: {vol_24h:,.0f} USD | Ratio Vol/MktCap: {f"{liq_ratio}%" if liq_ratio else "desconocido"}
 - Volumen 7d: {vol_7d:,.0f} USD
+- Cambio 24h: {chg_24h}% | Cambio 7d: {change_7d or chg_30d or "desconocido"}% | Cambio 30d: {chg_30d or "desconocido"}%
+- Distancia al ATH: {f"{ath_pct:.1f}%" if ath_pct else "desconocido"}
+- Sentimiento positivo: {f"{sent:.0f}%" if sent else "desconocido"}
+- Supply circulante/total: {f"{supply_pct}%" if supply_pct else "desconocido"}
+- Fecha genesis: {genesis}
+- Hora UTC de la señal: {hora_utc}h
 
 Devuelve el JSON con score y resumen."""
 
@@ -327,13 +406,22 @@ def ai_tecnico_score(pair, priceDiff, volInEUR, side, num_signals_7d):
         return None
     try:
         lado_texto = "COMPRA masiva (bullish)" if side == "b" else "VENTA masiva (bearish)"
-        prompt = f"""Analiza esta señal de ballena:
+        from datetime import datetime
+        hora_utc = datetime.utcnow().hour
+        horario = "Europa/America (alta liquidez)" if 8 <= hora_utc <= 20 else "Asia/nocturno (baja liquidez)"
+
+        # Contexto de precio (ticker ya disponible desde get_ai_scores)
+        # Pasamos los datos extra via num_signals_7d (int) — usamos solo lo disponible
+        prompt = f"""Analiza esta señal de mecho de ballena:
 - Par: {pair}
 - Movimiento de precio: {priceDiff:.2f}%
 - Lado de la ballena: {lado_texto}
 - Volumen de la operación: {volInEUR:,.0f} USD
 - Señales del mismo par en últimos 7 días: {num_signals_7d}
+- Hora UTC: {hora_utc}h ({horario})
+- Interpretación del mecho: {"Ballena compró fuerte → precio subió → posible venta límite en el extremo alto esperando caída" if side == "b" else "Ballena vendió fuerte → precio cayó → posible compra límite en el extremo bajo esperando rebote"}
 
+Evalúa la probabilidad de reversión del mecho y si conviene poner una orden límite en el nivel extremo.
 Devuelve el JSON con score y resumen."""
 
         r = requests.post(
@@ -382,6 +470,7 @@ def get_ai_scores(pair, priceDiff, volInEUR, side, ticker, change_7d):
     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
         f_fund = executor.submit(ai_fundamental_score, pair, ticker, change_7d)
         f_tec  = executor.submit(ai_tecnico_score, pair, priceDiff, volInEUR, side, count_7d)
+        # CoinGecko full data en paralelo para pre-cachear
         fund = f_fund.result(timeout=20)
         tec  = f_tec.result(timeout=20)
 
@@ -1455,16 +1544,29 @@ def createTGmessage(tradeDF, pair, volInEUR, priceDiff, wsnames, pairs, ticker=N
     else:
         quintaLinea = ""
         sextaLinea = f"\n[📊 CoinGecko]({cmc_url})"
-    # Linea de score IA
+    # Score IA — aparece después del enlace a CoinGecko
     if ai_scores:
-        stars = "⭐" * round(ai_scores["score_final"])
+        score_final = ai_scores["score_final"]
+        # Emoji de calidad según score
+        if score_final >= 8:
+            quality = "🟢"
+        elif score_final >= 6:
+            quality = "🟡"
+        else:
+            quality = "🔴"
         fund_str = f"{ai_scores['score_fund']:.1f}" if ai_scores.get('score_fund') else "—"
         tec_str  = f"{ai_scores['score_tec']:.1f}"  if ai_scores.get('score_tec')  else "—"
-        resumen  = ai_scores.get("resumen_tec") or ai_scores.get("resumen_fund") or ""
-        septimaLinea = f"\n{stars} *Score IA: {ai_scores['score_final']}/10* (Fund: {fund_str} | Téc: {tec_str})\n💡 _{resumen}_"
+        resumen_fund = ai_scores.get("resumen_fund") or ""
+        resumen_tec  = ai_scores.get("resumen_tec")  or ""
+        septimaLinea = (
+            f"\n{quality} *Score IA: {score_final}/10*"
+            f" (Fund: {fund_str} | Téc: {tec_str})"
+            f"\n📌 Fund: _{resumen_fund}_"
+            f"\n📌 Téc: _{resumen_tec}_"
+        )
     else:
         septimaLinea = ""
-    return f"{primeraLinea} {segundaLinea} {terceraLinea}{quintaLinea}{sextaLinea}{septimaLinea} {marginMessage}"
+    return f"{primeraLinea} {segundaLinea} {terceraLinea}{quintaLinea}{sextaLinea}{septimaLinea}{marginMessage}"
 
 def telegram_bot_sendtext(bot_message):
     url = f'https://api.telegram.org/bot{bot_token}/sendMessage'
