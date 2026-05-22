@@ -1678,19 +1678,54 @@ def tradeLoop(pairsList, wsnames, pairs, eurPrices, label):
                         _tok = pair.split("/")[0] if "/" in pair else pair
                         for _s in [".S",".P",".M","2"]: _tok = _tok.replace(_s,"")
                         c7d = _cg_cache.get("7d_" + _tok)
-                        # Obtener scores IA en paralelo (en hilo para no bloquear WS)
-                        ai_scores = None
-                        if ANTHROPIC_KEY:
+                        # 1. Enviar señal inmediatamente sin score IA
+                        TGmsg = createTGmessage(tradeDF, pair, volInEUR, priceDiff, wsnames, pairs, ticker, c7d, None)
+                        tg_response = telegram_bot_sendtext(TGmsg)
+                        msg_id = tg_response.get("result", {}).get("message_id")
+
+                        # 2. Calcular score IA en background y enviar como reply
+                        def send_ai_score_reply(pair=pair, priceDiff=priceDiff, volInEUR=volInEUR,
+                                                side=tradeDF["side"].iloc[0], ticker=ticker,
+                                                c7d=c7d, msg_id=msg_id):
+                            if not ANTHROPIC_KEY:
+                                return
                             try:
-                                ai_scores = get_ai_scores(
-                                    pair, priceDiff, volInEUR,
-                                    tradeDF["side"].iloc[0],
-                                    ticker, c7d
+                                scores = get_ai_scores(pair, priceDiff, volInEUR, side, ticker, c7d)
+                                if not scores:
+                                    return
+                                score_final = scores["score_final"]
+                                if score_final >= 8:
+                                    quality = "🟢"
+                                elif score_final >= 6:
+                                    quality = "🟡"
+                                else:
+                                    quality = "🔴"
+                                fund_str = f"{scores['score_fund']:.1f}" if scores.get('score_fund') else "—"
+                                tec_str  = f"{scores['score_tec']:.1f}"  if scores.get('score_tec')  else "—"
+                                rf = scores.get("resumen_fund","")
+                                rt = scores.get("resumen_tec","")
+                                score_msg = (
+                                    f"{quality} *Score IA: {score_final}/10*"
+                                    f" (Fund: {fund_str} | Téc: {tec_str})"
+                                    f"\n📌 Fund: _{rf}_"
+                                    f"\n📌 Téc: _{rt}_"
                                 )
+                                # Enviar como reply al mensaje original
+                                url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+                                params = {
+                                    "chat_id": bot_chatID,
+                                    "parse_mode": "Markdown",
+                                    "text": score_msg,
+                                    "disable_web_page_preview": True
+                                }
+                                if msg_id:
+                                    params["reply_to_message_id"] = msg_id
+                                requests.post(url, params=params, timeout=10)
+                                print(f"✅ Score IA enviado: {pair} {score_final}/10")
                             except Exception as _e:
-                                print(f"AI score error: {_e}")
-                        TGmsg = createTGmessage(tradeDF, pair, volInEUR, priceDiff, wsnames, pairs, ticker, c7d, ai_scores)
-                        telegram_bot_sendtext(TGmsg)
+                                print(f"AI score reply error: {_e}")
+
+                        threading.Thread(target=send_ai_score_reply, daemon=True).start()
                         # Actualizar cache 7d en hilo separado
                         threading.Thread(target=get_7d_change, args=(pair,), daemon=True).start()
                         # Actualizar contador de señales recientes y disparar Twilio si aplica
