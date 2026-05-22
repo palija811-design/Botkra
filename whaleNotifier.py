@@ -166,19 +166,34 @@ KRAKEN_TO_CG = {
     "HYPE":"hyperliquid","ASRR":"assister",
 }
 
+_cg_id_cache = {}
+
 def get_coingecko_id(token):
     t = token.upper()
+    if t in _cg_id_cache:
+        return _cg_id_cache[t]
     if t in KRAKEN_TO_CG:
+        _cg_id_cache[t] = KRAKEN_TO_CG[t]
         return KRAKEN_TO_CG[t]
+    # Buscar en CoinGecko por simbolo exacto
     try:
         r = requests.get(f"https://api.coingecko.com/api/v3/search?query={t}", timeout=8)
         if r.status_code == 200:
-            for coin in r.json().get("coins", []):
+            coins = r.json().get("coins", [])
+            # Primero buscar coincidencia exacta de simbolo
+            for coin in coins:
                 if coin.get("symbol","").upper() == t:
+                    _cg_id_cache[t] = coin["id"]
                     return coin["id"]
+            # Si no hay exacta, usar el primero que aparece
+            if coins:
+                _cg_id_cache[t] = coins[0]["id"]
+                return coins[0]["id"]
     except Exception:
         pass
-    return t.lower()
+    result = t.lower()
+    _cg_id_cache[t] = result
+    return result
 
 def get_7d_change(pair):
     import time as _time
@@ -221,27 +236,35 @@ _ai_score_cache = {}
 _ai_score_cache_time = {}
 AI_CACHE_TTL = 3600  # 1 hora por par
 
-SYSTEM_FUNDAMENTAL = """Eres un analista experto en análisis fundamental de criptomonedas.
-Tu objetivo es evaluar proyectos crypto basándote exclusivamente en datos de mercado cuantitativos.
-Cuando recibas datos de un token, devuelve SOLO un JSON con este formato exacto:
+SYSTEM_FUNDAMENTAL = """Eres un analista experto en análisis fundamental de criptomonedas con acceso a búsqueda web.
+Tu objetivo es determinar si un proyecto crypto tiene valor real y proyección de futuro, o si es una memecoin/shitcoin especulativa.
+
+Cuando recibas datos de un token, usa la herramienta web_search para investigar:
+1. Busca "{TOKEN} cryptocurrency project" para entender qué hace el proyecto
+2. Busca "{TOKEN} crypto team whitepaper" para evaluar el equipo y tecnología
+3. Si no encuentras nada relevante en 2 búsquedas, basa el análisis en los datos numéricos
+
+Tras investigar, devuelve SOLO un JSON con este formato exacto:
 {"score": 7.5, "resumen": "Texto breve de máximo 15 palabras explicando el score"}
 
 El score va de 1 a 10 donde:
-- 1-3: Proyecto especulativo, manipulado o sin liquidez real
-- 4-5: Proyecto mediocre, sin tracción clara
-- 6-7: Proyecto interesante con fundamentos moderados
-- 8-9: Proyecto sólido con buena liquidez y tendencia
-- 10: Proyecto excepcional con todos los indicadores positivos
+- 1-2: Memecoin/shitcoin sin utilidad real, proyecto clon o scam
+- 3-4: Proyecto muy especulativo, sin equipo claro o sin caso de uso real
+- 5-6: Proyecto con algo de utilidad pero sin diferenciación clara o comunidad pequeña
+- 7-8: Proyecto sólido con utilidad real, equipo identificable y comunidad activa
+- 9-10: Proyecto excepcional con tecnología diferencial, equipo top y adopción real
 
-Factores CLAVE a valorar en orden de importancia:
-1. LIQUIDEZ: Vol24h/MarketCap > 0.1 = excelente, > 0.05 = bueno, < 0.01 = bajo
-2. TENDENCIA: Cambio 30d y 7d positivos y crecientes = positivo
-3. DISTANCIA AL ATH: cerca del ATH = posible resistencia; lejos = potencial upside
-4. RANKING: Top 100 = más fiable, Top 500 = moderado, fuera Top 1000 = especulativo
-5. ANTIGÜEDAD: proyecto con fecha genesis = más fiable que sin datos
-6. SENTIMIENTO: >60% positivo = bueno
-7. SUPPLY: circulating/total alto = menos presión vendedora futura
-8. HORA DE LA SEÑAL: señales en horario europeo/americano más fiables
+Factores CUALITATIVOS (más importantes):
+1. UTILIDAD REAL: ¿resuelve un problema concreto? ¿tiene producto funcionando?
+2. EQUIPO: ¿hay personas identificables con trayectoria? ¿es anónimo?
+3. TECNOLOGÍA: ¿tiene whitepaper serio? ¿es fork/clon o innovación propia?
+4. COMUNIDAD: ¿tiene usuarios reales o solo especuladores?
+5. INVERSORES: ¿hay VCs o fondos conocidos detrás?
+6. COMPETENCIA: ¿tiene ventaja competitiva o hay 100 proyectos iguales?
+7. NOTICIAS: ¿hay desarrollos recientes positivos o negativos?
+
+Factores CUANTITATIVOS (secundarios):
+- Ranking CoinGecko, volumen, market cap, antigüedad del proyecto
 
 Responde SOLO con el JSON puro, sin backticks, sin texto adicional, sin markdown."""
 
@@ -335,6 +358,20 @@ def ai_fundamental_score(pair, ticker, change_7d):
 
         # Obtener datos completos de CoinGecko
         cg = get_coingecko_full(pair)
+        # Si no hay datos de CoinGecko, usar solo los del ticker
+        if not cg:
+            cg = {
+                "name": token,
+                "categories": [],
+                "market_cap_usd": None,
+                "rank": None,
+                "change_30d": None,
+                "ath_change_pct": None,
+                "sentiment_up": None,
+                "circulating_supply": None,
+                "total_supply": None,
+                "genesis_date": None,
+            }
         mktcap  = cg.get("market_cap_usd") or 0
         rank    = cg.get("rank") or "desconocido"
         chg_30d = cg.get("change_30d")
@@ -350,22 +387,18 @@ def ai_fundamental_score(pair, ticker, change_7d):
         from datetime import datetime
         hora_utc = datetime.utcnow().hour
 
-        prompt = f"""Analiza este token crypto con datos completos:
-- Par: {pair} | Nombre: {cg.get("name", token)}
-- Categorías: {cats}
-- Ranking CoinGecko: #{rank}
-- Precio actual: {cg.get("price_usd") or "desconocido"} USD
-- Market Cap: {mktcap:,.0f} USD
-- Volumen 24h: {vol_24h:,.0f} USD | Ratio Vol/MktCap: {f"{liq_ratio}%" if liq_ratio else "desconocido"}
-- Volumen 7d: {vol_7d:,.0f} USD
-- Cambio 24h: {chg_24h}% | Cambio 7d: {change_7d or chg_30d or "desconocido"}% | Cambio 30d: {chg_30d or "desconocido"}%
-- Distancia al ATH: {f"{ath_pct:.1f}%" if ath_pct else "desconocido"}
-- Sentimiento positivo: {f"{sent:.0f}%" if sent else "desconocido"}
-- Supply circulante/total: {f"{supply_pct}%" if supply_pct else "desconocido"}
-- Fecha genesis: {genesis}
-- Hora UTC de la señal: {hora_utc}h
+        prompt = f"""Analiza el proyecto crypto con símbolo {token} (par: {pair}).
+Nombre conocido: {cg.get("name", token)} | Categorías: {cats} | Ranking: #{rank}
 
-Devuelve el JSON con score y resumen."""
+Datos de mercado:
+- Market Cap: {f"{mktcap:,.0f} USD" if mktcap else "desconocido"}
+- Volumen 24h: {vol_24h:,.0f} USD | Ratio Vol/MC: {f"{liq_ratio}%" if liq_ratio else "desconocido"}
+- Cambio 7d: {change_7d or "desconocido"}% | Cambio 30d: {chg_30d or "desconocido"}%
+- Distancia ATH: {f"{ath_pct:.1f}%" if ath_pct else "desconocido"} | Genesis: {genesis}
+
+INVESTIGA con web_search si es un proyecto con utilidad real o una memecoin/shitcoin.
+Busca: "{token} cryptocurrency" y "{cg.get("name", token)} crypto project whitepaper team"
+Luego devuelve el JSON con score (1-10) y resumen de máximo 15 palabras."""
 
         r = requests.post(
             "https://api.anthropic.com/v1/messages",
@@ -376,15 +409,22 @@ Devuelve el JSON con score y resumen."""
             },
             json={
                 "model": "claude-haiku-4-5-20251001",
-                "max_tokens": 100,
+                "max_tokens": 1024,
                 "system": SYSTEM_FUNDAMENTAL,
+                "tools": [{"type": "web_search_20250305", "name": "web_search"}],
                 "messages": [{"role": "user", "content": prompt}]
             },
-            timeout=15
+            timeout=30
         )
         if r.status_code == 200:
-            text = r.json()["content"][0]["text"].strip()
-            # Limpiar backticks de markdown si los hay
+            # Extraer solo bloques de texto (ignorar tool_use y tool_result)
+            blocks = r.json().get("content", [])
+            text = ""
+            for block in blocks:
+                if block.get("type") == "text":
+                    text = block.get("text", "").strip()
+            if not text:
+                return None
             text = text.replace("```json","").replace("```","").strip()
             data = _json.loads(text)
             result = {"score": float(data["score"]), "resumen": data.get("resumen", "")}
@@ -557,9 +597,17 @@ def get_ticker_24h(pair):
             cg_vol = cg_data.get('usd_24h_vol')
             if cg_vol and cg_vol > 0:
                 vol_24h_usd = cg_vol
-            cg_vol_7d = cg_data.get('usd_7d_vol')
-            if cg_vol_7d and cg_vol_7d > 0:
-                vol_7d_usd = round(cg_vol_7d, 0)
+            # usd_7d_vol no existe en CoinGecko - obtenerlo via market_chart
+            try:
+                cg_id_local = get_coingecko_id(token)
+                chart_url = f"https://api.coingecko.com/api/v3/coins/{cg_id_local}/market_chart?vs_currency=usd&days=7"
+                chart_r = requests.get(chart_url, timeout=8)
+                if chart_r.status_code == 200:
+                    vols_7d = chart_r.json().get("total_volumes", [])
+                    if vols_7d:
+                        vol_7d_usd = round(sum(v[1] for v in vols_7d), 0)
+            except Exception:
+                pass
         except Exception:
             pass
 
@@ -1570,7 +1618,7 @@ def createTGmessage(tradeDF, pair, volInEUR, priceDiff, wsnames, pairs, ticker=N
         )
     else:
         septimaLinea = ""
-    return f"{primeraLinea} {segundaLinea} {terceraLinea}{quintaLinea}{sextaLinea}{septimaLinea}{marginMessage}"
+    return f"{primeraLinea} {segundaLinea} {terceraLinea}{sextaLinea}{quintaLinea}{septimaLinea}{marginMessage}"
 
 def telegram_bot_sendtext(bot_message):
     url = f'https://api.telegram.org/bot{bot_token}/sendMessage'
