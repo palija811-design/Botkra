@@ -34,6 +34,7 @@ else:
     bot_chatID = os.getenv("BOT_CHAT_ID", "")
     print("Production")
 
+ANTHROPIC_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 # Base de datos
 DB_PATH = os.getenv("DB_PATH", "/data/signals.db")
 
@@ -81,8 +82,8 @@ db_lock = threading.Lock()
 from collections import defaultdict
 _recent_signals = defaultdict(list)  # pair -> [timestamps]
 _recent_lock = threading.Lock()
-RAFAGA_WINDOW_MIN = 1440  # ventana de tiempo en minutos (24h)
-RAFAGA_MIN_COUNT  = 3    # señales mínimas para disparar llamada
+RAFAGA_WINDOW_MIN = 10080  # ventana de tiempo en minutos (7 dias)
+RAFAGA_MIN_COUNT  = 2     # señales minimas para disparar llamada
 
 def save_signal(tradeDF, pair, volInEUR, priceDiff):
     try:
@@ -213,58 +214,266 @@ def get_cmc_url(token):
     return "https://www.coingecko.com/en/coins/" + get_coingecko_id(t)
 
 
+# ─────────────────────────────────────────────
+# AGENTES IA — Análisis Fundamental y Técnico
+# ─────────────────────────────────────────────
+_ai_score_cache = {}
+_ai_score_cache_time = {}
+AI_CACHE_TTL = 3600  # 1 hora por par
+
+SYSTEM_FUNDAMENTAL = """Eres un analista experto en análisis fundamental de criptomonedas.
+Tu objetivo es evaluar proyectos crypto basándote en datos de mercado disponibles.
+Cuando recibas datos de un token, devuelve SOLO un JSON con este formato exacto:
+{"score": 7.5, "resumen": "Texto breve de máximo 15 palabras explicando el score"}
+
+El score va de 1 a 10 donde:
+- 1-3: Proyecto de muy bajo valor, especulativo o dudoso
+- 4-5: Proyecto mediocre o sin diferenciación clara
+- 6-7: Proyecto interesante con potencial moderado
+- 8-9: Proyecto sólido con buenos fundamentos
+- 10: Proyecto excepcional
+
+Factores a valorar:
+- Volumen 24h alto relativo al proyecto = positivo
+- Volumen 7d consistente = positivo
+- Cambio 24h y 7d positivos = positivo
+- Tokens muy pequeños con poco volumen = negativo
+- Consistencia entre volúmenes = positivo
+
+Responde SOLO con el JSON, sin texto adicional."""
+
+SYSTEM_TECNICO = """Eres un analista experto en análisis técnico de criptomonedas.
+Tu objetivo es evaluar señales de trading basándote en movimientos de precio y volumen.
+Cuando recibas datos de una señal de ballena, devuelve SOLO un JSON con este formato exacto:
+{"score": 7.5, "resumen": "Texto breve de máximo 15 palabras explicando el score"}
+
+El score va de 1 a 10 donde:
+- 1-3: Señal débil, poco fiable o en tendencia contraria
+- 4-5: Señal moderada, contexto mixto
+- 6-7: Señal interesante con buen contexto técnico
+- 8-9: Señal fuerte con alta probabilidad de continuación o reversión
+- 10: Señal excepcional con múltiples confirmaciones
+
+Factores a valorar:
+- Movimiento >5% = señal fuerte
+- Volumen de operación alto = confirmación
+- Múltiples señales del mismo par en poco tiempo = acumulación/distribución
+- Lado BUY con tendencia semanal alcista = positivo
+- Lado SELL en zona de resistencia = potencial reversión bajista
+
+Responde SOLO con el JSON, sin texto adicional."""
+
+
+def ai_fundamental_score(pair, ticker, change_7d):
+    """Agente de análisis fundamental — evalúa el proyecto."""
+    import time as _time, json as _json
+    cache_key = f"fund_{pair}"
+    now = _time.time()
+    if cache_key in _ai_score_cache and now - _ai_score_cache_time.get(cache_key, 0) < AI_CACHE_TTL:
+        return _ai_score_cache[cache_key]
+    if not ANTHROPIC_KEY:
+        return None
+    try:
+        token = pair.split("/")[0] if "/" in pair else pair
+        vol_24h = ticker.get("vol_24h_base", 0) if ticker else 0
+        vol_7d  = ticker.get("vol_7d_usd", 0) if ticker else 0
+        chg_24h = ticker.get("change_24h", 0) if ticker else 0
+        prompt = f"""Analiza este token crypto:
+- Par: {pair}
+- Token: {token}
+- Cambio 24h: {chg_24h}%
+- Cambio 7d: {change_7d if change_7d is not None else 'desconocido'}%
+- Volumen 24h: {vol_24h:,.0f} USD
+- Volumen 7d: {vol_7d:,.0f} USD
+
+Devuelve el JSON con score y resumen."""
+
+        r = requests.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={
+                "x-api-key": ANTHROPIC_KEY,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json"
+            },
+            json={
+                "model": "claude-haiku-4-5-20251001",
+                "max_tokens": 100,
+                "system": SYSTEM_FUNDAMENTAL,
+                "messages": [{"role": "user", "content": prompt}]
+            },
+            timeout=15
+        )
+        if r.status_code == 200:
+            text = r.json()["content"][0]["text"].strip()
+            data = _json.loads(text)
+            result = {"score": float(data["score"]), "resumen": data.get("resumen", "")}
+            _ai_score_cache[cache_key] = result
+            _ai_score_cache_time[cache_key] = now
+            return result
+    except Exception as e:
+        print(f"AI Fundamental error {pair}: {e}")
+    return None
+
+
+def ai_tecnico_score(pair, priceDiff, volInEUR, side, num_signals_7d):
+    """Agente de análisis técnico — evalúa la señal."""
+    import time as _time, json as _json
+    cache_key = f"tec_{pair}_{round(priceDiff,1)}_{side}"
+    now = _time.time()
+    # Cache corto para técnico (15 min) ya que depende de la señal actual
+    if cache_key in _ai_score_cache and now - _ai_score_cache_time.get(cache_key, 0) < 900:
+        return _ai_score_cache[cache_key]
+    if not ANTHROPIC_KEY:
+        return None
+    try:
+        lado_texto = "COMPRA masiva (bullish)" if side == "b" else "VENTA masiva (bearish)"
+        prompt = f"""Analiza esta señal de ballena:
+- Par: {pair}
+- Movimiento de precio: {priceDiff:.2f}%
+- Lado de la ballena: {lado_texto}
+- Volumen de la operación: {volInEUR:,.0f} USD
+- Señales del mismo par en últimos 7 días: {num_signals_7d}
+
+Devuelve el JSON con score y resumen."""
+
+        r = requests.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={
+                "x-api-key": ANTHROPIC_KEY,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json"
+            },
+            json={
+                "model": "claude-haiku-4-5-20251001",
+                "max_tokens": 100,
+                "system": SYSTEM_TECNICO,
+                "messages": [{"role": "user", "content": prompt}]
+            },
+            timeout=15
+        )
+        if r.status_code == 200:
+            text = r.json()["content"][0]["text"].strip()
+            data = _json.loads(text)
+            result = {"score": float(data["score"]), "resumen": data.get("resumen", "")}
+            _ai_score_cache[cache_key] = result
+            _ai_score_cache_time[cache_key] = now
+            return result
+    except Exception as e:
+        print(f"AI Tecnico error {pair}: {e}")
+    return None
+
+
+def get_ai_scores(pair, priceDiff, volInEUR, side, ticker, change_7d):
+    """Obtiene ambos scores y calcula la media. Corre en threads paralelos."""
+    import concurrent.futures
+    # Contar señales del par en últimos 7 días
+    try:
+        from datetime import datetime, timedelta
+        since_7d = (datetime.utcnow() - timedelta(days=7)).isoformat()
+        conn = sqlite3.connect(DB_PATH, timeout=5)
+        count_7d = conn.execute(
+            "SELECT COUNT(*) FROM signals WHERE pair=? AND timestamp>=?",
+            (pair, since_7d)
+        ).fetchone()[0]
+        conn.close()
+    except:
+        count_7d = 1
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+        f_fund = executor.submit(ai_fundamental_score, pair, ticker, change_7d)
+        f_tec  = executor.submit(ai_tecnico_score, pair, priceDiff, volInEUR, side, count_7d)
+        fund = f_fund.result(timeout=20)
+        tec  = f_tec.result(timeout=20)
+
+    if fund and tec:
+        score_final = round((fund["score"] + tec["score"]) / 2, 1)
+        return {
+            "score_final": score_final,
+            "score_fund":  fund["score"],
+            "score_tec":   tec["score"],
+            "resumen_fund": fund["resumen"],
+            "resumen_tec":  tec["resumen"]
+        }
+    elif fund:
+        return {"score_final": fund["score"], "score_fund": fund["score"], "score_tec": None,
+                "resumen_fund": fund["resumen"], "resumen_tec": ""}
+    elif tec:
+        return {"score_final": tec["score"], "score_fund": None, "score_tec": tec["score"],
+                "resumen_fund": "", "resumen_tec": tec["resumen"]}
+    return None
+
+
 def get_ticker_24h(pair):
-    """Obtiene volumen 24h y cambio 24h de Kraken. Con caché de 5 minutos."""
+    """Obtiene volumen 24h y cambio 24h. Usa CoinGecko para volumen USD preciso."""
     import time as _time
     now = _time.time()
     if pair in _ticker_cache and now - _ticker_cache_time.get(pair, 0) < TICKER_CACHE_TTL:
         return _ticker_cache[pair]
     try:
+        # Datos de precio y cambio desde Kraken
         pair_clean = pair.replace('/', '')
         url = f'https://api.kraken.com/0/public/Ticker?pair={pair_clean}'
         r = requests.get(url, timeout=5)
         if r.status_code != 200:
             return None
-        result = r.json().get('result', {})
-        if not result:
+        kr = r.json().get('result', {})
+        if not kr:
             return None
-        t = list(result.values())[0]
-        vol_24h_token = float(t['v'][1])          # tokens operados en 24h
-        price_last    = float(t['c'][0])           # último precio (igual que Kraken Pro)
-        vol_24h_base  = vol_24h_token * price_last # volumen en moneda base del par
+        t = list(kr.values())[0]
 
-        # Convertir a USD si la moneda base no es USD/USDT
+        price_now  = float(t['c'][0])
+        vwap_24h   = float(t['p'][1])
+        change_24h = round((price_now - vwap_24h) / vwap_24h * 100, 2)
+        high_24h   = float(t['h'][1])
+        low_24h    = float(t['l'][1])
+        vol_24h_token = float(t['v'][1])
+
+        # Volumen en USD: tokens × VWAP 24h (mejor aproximación que precio actual)
         base = pair.split('/')[-1] if '/' in pair else 'USD'
+        vol_base = vol_24h_token * vwap_24h  # en moneda base del par
         if base in ('USD', 'USDT'):
-            vol_24h_usd = vol_24h_base
+            vol_24h_usd = vol_base
         elif base == 'EUR':
-            # Obtener tipo de cambio EUR/USD
             try:
                 fx = requests.get('https://api.kraken.com/0/public/Ticker?pair=EURUSD', timeout=5).json()
                 eur_usd = float(list(fx['result'].values())[0]['c'][0])
             except:
-                eur_usd = 1.08  # fallback
-            vol_24h_usd = vol_24h_base * eur_usd
+                eur_usd = 1.08
+            vol_24h_usd = vol_base * eur_usd
         elif base == 'GBP':
             try:
                 fx = requests.get('https://api.kraken.com/0/public/Ticker?pair=GBPUSD', timeout=5).json()
                 gbp_usd = float(list(fx['result'].values())[0]['c'][0])
             except:
-                gbp_usd = 1.27  # fallback
-            vol_24h_usd = vol_24h_base * gbp_usd
+                gbp_usd = 1.27
+            vol_24h_usd = vol_base * gbp_usd
         else:
-            # Para cualquier otra moneda base, intentar con USD directo
-            vol_24h_usd = vol_24h_base
+            vol_24h_usd = vol_base
 
-        # Cambio 24h rodante: precio actual vs VWAP 24h (igual que Kraken Pro)
-        price_now  = float(t['c'][0])   # último precio
-        vwap_24h   = float(t['p'][1])   # precio medio ponderado últimas 24h
-        change_24h = round((price_now - vwap_24h) / vwap_24h * 100, 2)
-        high_24h   = float(t['h'][1])
-        low_24h    = float(t['l'][1])
+        # Intentar mejorar el volumen USD con CoinGecko (más preciso)
+        token = pair.split('/')[0] if '/' in pair else pair
+        for s in ['.S','.P','.M','2']: token = token.replace(s,'')
+        vol_7d_usd = None
+        try:
+            cg_id = get_coingecko_id(token)
+            cg = requests.get(
+                f'https://api.coingecko.com/api/v3/simple/price?ids={cg_id}&vs_currencies=usd&include_24hr_vol=true&include_7d_vol=true',
+                timeout=5
+            ).json()
+            cg_data = cg.get(cg_id, {})
+            cg_vol = cg_data.get('usd_24h_vol')
+            if cg_vol and cg_vol > 0:
+                vol_24h_usd = cg_vol
+            cg_vol_7d = cg_data.get('usd_7d_vol')
+            if cg_vol_7d and cg_vol_7d > 0:
+                vol_7d_usd = round(cg_vol_7d, 0)
+        except Exception:
+            pass
+
         result = {
             'vol_24h_token': vol_24h_token,
-            'vol_24h_base': vol_24h_usd,   # siempre en USD
+            'vol_24h_base': round(vol_24h_usd, 0),
+            'vol_7d_usd': vol_7d_usd,
             'change_24h': change_24h,
             'high_24h': high_24h,
             'low_24h': low_24h
@@ -389,7 +598,7 @@ tr:hover td{background:var(--surface)}
 .badge-count{background:#00d4ff15;color:var(--accent);border:1px solid var(--accent)}
 .badge-side-b{background:#00ff8815;color:var(--green);border:1px solid var(--green)}
 .badge-side-s{background:#ff446615;color:var(--red);border:1px solid var(--red)}
-.card-metrics{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:0;border-bottom:1px solid var(--border)}
+.card-metrics{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0;border-bottom:1px solid var(--border)}
 .card-metric{padding:0.6rem 0.8rem;border-right:1px solid var(--border)}
 .card-metric:last-child{border-right:none}
 .card-metric-label{font-size:0.56rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.07em}
@@ -657,6 +866,7 @@ async function loadAnalizar(){
           <span class="badge ${badgeClass}">${badgeText}</span>
           <span class="badge badge-count">${g.count} señales</span>
           <span class="badge ${sideClass}">${sideText}</span>
+          ${g.ai_score!==null&&g.ai_score!==undefined?`<span class="badge" style="background:${g.ai_score>=7?'#00ff8820':g.ai_score>=5?'#ffaa0020':'#ff446620'};color:${g.ai_score>=7?'var(--green)':g.ai_score>=5?'var(--orange)':'var(--red)'};border:1px solid ${g.ai_score>=7?'var(--green)':g.ai_score>=5?'var(--orange)':'var(--red)'}">⭐ ${g.ai_score}/10</span>`:''}
         </div>
       </div>
       <div class="card-metrics">
@@ -676,8 +886,13 @@ async function loadAnalizar(){
           <div class="card-metric-label">Vol 24h</div>
           <div class="card-metric-value vol">${t.vol_24h_base!==undefined?fmt(t.vol_24h_base)+'$':'—'}</div>
         </div>
+        <div class="card-metric">
+          <div class="card-metric-label">Vol 7d</div>
+          <div class="card-metric-value vol">${t.vol_7d_usd!==undefined&&t.vol_7d_usd?fmt(t.vol_7d_usd)+'$':'—'}</div>
+        </div>
       </div>
       <div class="card-signals">${signalRows}</div>
+      ${g.ai_summary?`<div style="padding:0.4rem 0.8rem;font-size:0.64rem;color:var(--muted);border-top:1px solid var(--border);font-style:italic">💡 ${g.ai_summary}</div>`:''}
       <div class="card-footer">
         <a href="${kUrl}" target="_blank" class="kraken-btn">📊 Kraken</a>
         <a href="${g.cmc_url}" target="_blank" class="kraken-btn" style="background:#0d1f3c;border-color:#1a4080">🦎 CoinGecko</a>
@@ -872,6 +1087,28 @@ def api_analizar():
         vols  = [s['volume_eur'] for s in sigs]
         t_last = sigs[-1]['timestamp']
         token = pair.split('/')[0] if '/' in pair else pair
+        # AI score from cache only (don't block the API response)
+        ai_cache_key_f = f"fund_{pair}"
+        ai_cache_key_t = f"tec_{pair}"
+        fund_cached = _ai_score_cache.get(ai_cache_key_f)
+        tec_cached  = None
+        # Find latest tec score for this pair
+        for k, v in _ai_score_cache.items():
+            if k.startswith(f"tec_{pair}_"):
+                tec_cached = v
+                break
+        if fund_cached and tec_cached:
+            ai_score_final = round((fund_cached["score"] + tec_cached["score"]) / 2, 1)
+            ai_summary = tec_cached.get("resumen") or fund_cached.get("resumen") or ""
+        elif fund_cached:
+            ai_score_final = fund_cached["score"]
+            ai_summary = fund_cached.get("resumen", "")
+        elif tec_cached:
+            ai_score_final = tec_cached["score"]
+            ai_summary = tec_cached.get("resumen", "")
+        else:
+            ai_score_final = None
+            ai_summary = ""
         result.append({
             'pair': pair,
             'count': len(sigs),
@@ -881,7 +1118,9 @@ def api_analizar():
             'last_signal': t_last,
             'signals': sigs,
             'change_7d': get_7d_change(pair),
-            'cmc_url': get_cmc_url(token)
+            'cmc_url': get_cmc_url(token),
+            'ai_score': ai_score_final,
+            'ai_summary': ai_summary
         })
     result.sort(key=lambda x: x['last_signal'], reverse=True)
     return jsonify(result)
@@ -1159,7 +1398,7 @@ def receiveSafeWS(ws):
     WSsource = "Primary" if source == 0 else "Backup"
     print("WebSocket {}):".format(WSsource))
 
-def createTGmessage(tradeDF, pair, volInEUR, priceDiff, wsnames, pairs, ticker=None, change_7d=None):
+def createTGmessage(tradeDF, pair, volInEUR, priceDiff, wsnames, pairs, ticker=None, change_7d=None, ai_scores=None):
     pairTB = pair.replace("/", "")
     primeraLinea = f"#{pairTB}"
     token = pair.split("/")[0]
@@ -1209,12 +1448,23 @@ def createTGmessage(tradeDF, pair, volInEUR, priceDiff, wsnames, pairs, ticker=N
             line_7d = f" | {emoji_7d} 7d: *{change_7d:+.2f}%*"
         else:
             line_7d = ""
-        quintaLinea = f"\n{change_emoji_24} 24h: *{ticker['change_24h']:+.2f}%* | Vol: {vol24_annotated}${line_7d}"
+        vol7d = ticker.get('vol_7d_usd')
+        vol7d_str = f" | Vol 7d: {anotateVolume(vol7d)}$" if vol7d else ""
+        quintaLinea = f"\n{change_emoji_24} 24h: *{ticker['change_24h']:+.2f}%* | Vol: {vol24_annotated}${line_7d}{vol7d_str}"
         sextaLinea = f"\n[📊 CoinGecko]({cmc_url})"
     else:
         quintaLinea = ""
         sextaLinea = f"\n[📊 CoinGecko]({cmc_url})"
-    return f"{primeraLinea} {segundaLinea} {terceraLinea}{quintaLinea}{sextaLinea} {marginMessage}"
+    # Linea de score IA
+    if ai_scores:
+        stars = "⭐" * round(ai_scores["score_final"])
+        fund_str = f"{ai_scores['score_fund']:.1f}" if ai_scores.get('score_fund') else "—"
+        tec_str  = f"{ai_scores['score_tec']:.1f}"  if ai_scores.get('score_tec')  else "—"
+        resumen  = ai_scores.get("resumen_tec") or ai_scores.get("resumen_fund") or ""
+        septimaLinea = f"\n{stars} *Score IA: {ai_scores['score_final']}/10* (Fund: {fund_str} | Téc: {tec_str})\n💡 _{resumen}_"
+    else:
+        septimaLinea = ""
+    return f"{primeraLinea} {segundaLinea} {terceraLinea}{quintaLinea}{sextaLinea}{septimaLinea} {marginMessage}"
 
 def telegram_bot_sendtext(bot_message):
     url = f'https://api.telegram.org/bot{bot_token}/sendMessage'
@@ -1322,13 +1572,24 @@ def tradeLoop(pairsList, wsnames, pairs, eurPrices, label):
                     elif vol_24h < 50000:
                         print(f"⏭ [{label}] {pair} omitido — vol 24h: {round(vol_24h,0):,.0f}$ < 50K$")
                     else:
-                        # Obtener 7d del cache (no bloquea si ya está cacheado)
+                        # Obtener 7d del cache
                         _tok = pair.split("/")[0] if "/" in pair else pair
                         for _s in [".S",".P",".M","2"]: _tok = _tok.replace(_s,"")
                         c7d = _cg_cache.get("7d_" + _tok)
-                        TGmsg = createTGmessage(tradeDF, pair, volInEUR, priceDiff, wsnames, pairs, ticker, c7d)
+                        # Obtener scores IA en paralelo (en hilo para no bloquear WS)
+                        ai_scores = None
+                        if ANTHROPIC_KEY:
+                            try:
+                                ai_scores = get_ai_scores(
+                                    pair, priceDiff, volInEUR,
+                                    tradeDF["side"].iloc[0],
+                                    ticker, c7d
+                                )
+                            except Exception as _e:
+                                print(f"AI score error: {_e}")
+                        TGmsg = createTGmessage(tradeDF, pair, volInEUR, priceDiff, wsnames, pairs, ticker, c7d, ai_scores)
                         telegram_bot_sendtext(TGmsg)
-                        # Actualizar cache 7d en hilo separado para la proxima señal
+                        # Actualizar cache 7d en hilo separado
                         threading.Thread(target=get_7d_change, args=(pair,), daemon=True).start()
                         # Actualizar contador de señales recientes y disparar Twilio si aplica
                         now_ts = datetime.utcnow()
