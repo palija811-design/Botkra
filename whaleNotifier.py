@@ -236,37 +236,27 @@ _ai_score_cache = {}
 _ai_score_cache_time = {}
 AI_CACHE_TTL = 3600  # 1 hora por par
 
-SYSTEM_FUNDAMENTAL = """Eres un analista experto en análisis fundamental de criptomonedas con acceso a búsqueda web.
-Tu objetivo es determinar si un proyecto crypto tiene valor real y proyección de futuro, o si es una memecoin/shitcoin especulativa.
+SYSTEM_FUNDAMENTAL = """Eres un analista experto en análisis fundamental de criptomonedas.
+Tu objetivo es determinar si un proyecto crypto tiene valor real o es especulativo, basándote en datos de mercado.
 
-Cuando recibas datos de un token, usa la herramienta web_search para investigar:
-1. Busca "{TOKEN} cryptocurrency project" para entender qué hace el proyecto
-2. Busca "{TOKEN} crypto team whitepaper" para evaluar el equipo y tecnología
-3. Si no encuentras nada relevante en 2 búsquedas, basa el análisis en los datos numéricos
-
-Tras investigar, devuelve SOLO un JSON con este formato exacto:
+Devuelve SOLO un JSON con este formato exacto:
 {"score": 7.5, "resumen": "Texto breve de máximo 15 palabras explicando el score"}
 
-El score va de 1 a 10 donde:
-- 1-2: Memecoin/shitcoin sin utilidad real, proyecto clon o scam
-- 3-4: Proyecto muy especulativo, sin equipo claro o sin caso de uso real
-- 5-6: Proyecto con algo de utilidad pero sin diferenciación clara o comunidad pequeña
-- 7-8: Proyecto sólido con utilidad real, equipo identificable y comunidad activa
-- 9-10: Proyecto excepcional con tecnología diferencial, equipo top y adopción real
+El score va de 1 a 10:
+- 1-3: Memecoin/shitcoin, sin utilidad, muy especulativo o ranking fuera top 1000
+- 4-5: Proyecto pequeño o sin diferenciación clara
+- 6-7: Proyecto con utilidad moderada, ranking razonable
+- 8-9: Proyecto sólido, top 200, buena liquidez y tendencia
+- 10: Proyecto excepcional
 
-Factores CUALITATIVOS (más importantes):
-1. UTILIDAD REAL: ¿resuelve un problema concreto? ¿tiene producto funcionando?
-2. EQUIPO: ¿hay personas identificables con trayectoria? ¿es anónimo?
-3. TECNOLOGÍA: ¿tiene whitepaper serio? ¿es fork/clon o innovación propia?
-4. COMUNIDAD: ¿tiene usuarios reales o solo especuladores?
-5. INVERSORES: ¿hay VCs o fondos conocidos detrás?
-6. COMPETENCIA: ¿tiene ventaja competitiva o hay 100 proyectos iguales?
-7. NOTICIAS: ¿hay desarrollos recientes positivos o negativos?
+Claves para el score:
+- Categoría "meme" o sin categoría → máximo 4
+- Ranking top 50 → mínimo 7
+- Ratio Vol/MC > 10% → señal de actividad real
+- Sin market cap o sin ranking → máximo 4
+- Cambio 30d positivo + top 500 → mínimo 6
 
-Factores CUANTITATIVOS (secundarios):
-- Ranking CoinGecko, volumen, market cap, antigüedad del proyecto
-
-Responde SOLO con el JSON puro, sin backticks, sin texto adicional, sin markdown."""
+Responde SOLO con el JSON puro, sin backticks, sin markdown."""
 
 SYSTEM_TECNICO = """Eres un analista experto en análisis técnico de criptomonedas especializado en detección de mechazos institucionales.
 Tu objetivo es evaluar señales de movimientos bruscos de ballenas para determinar si son oportunidades de entrada.
@@ -342,8 +332,8 @@ def get_coingecko_full(pair):
 
 
 def ai_fundamental_score(pair, ticker, change_7d):
-    """Agente de análisis fundamental — evalúa el proyecto."""
-    import time as _time, json as _json
+    """Agente de análisis fundamental con Haiku — evalúa el proyecto con datos de CoinGecko."""
+    import time as _time, json as _json, re as _re
     cache_key = f"fund_{pair}"
     now = _time.time()
     if cache_key in _ai_score_cache and now - _ai_score_cache_time.get(cache_key, 0) < AI_CACHE_TTL:
@@ -353,119 +343,69 @@ def ai_fundamental_score(pair, ticker, change_7d):
     try:
         token = pair.split("/")[0] if "/" in pair else pair
         vol_24h = ticker.get("vol_24h_base", 0) if ticker else 0
-        vol_7d  = ticker.get("vol_7d_usd", 0) if ticker else 0
-        chg_24h = ticker.get("change_24h", 0) if ticker else 0
+        vol_7d  = ticker.get("vol_7d_usd", 0)  if ticker else 0
+        chg_24h = ticker.get("change_24h", 0)  if ticker else 0
 
-        # Obtener datos completos de CoinGecko
-        cg = get_coingecko_full(pair)
-        # Si no hay datos de CoinGecko, usar solo los del ticker
-        if not cg:
-            cg = {
-                "name": token,
-                "categories": [],
-                "market_cap_usd": None,
-                "rank": None,
-                "change_30d": None,
-                "ath_change_pct": None,
-                "sentiment_up": None,
-                "circulating_supply": None,
-                "total_supply": None,
-                "genesis_date": None,
-            }
+        cg = get_coingecko_full(pair) or {}
         mktcap  = cg.get("market_cap_usd") or 0
         rank    = cg.get("rank") or "desconocido"
         chg_30d = cg.get("change_30d")
         ath_pct = cg.get("ath_change_pct")
-        sent    = cg.get("sentiment_up")
         circ    = cg.get("circulating_supply")
         total   = cg.get("total_supply")
         genesis = cg.get("genesis_date") or "desconocida"
-        cats    = ", ".join(cg.get("categories", [])) or "desconocida"
-        liq_ratio = round(vol_24h / mktcap * 100, 2) if mktcap and mktcap > 0 else None
+        cats    = ", ".join(cg.get("categories", [])) or "sin categoría"
+        name    = cg.get("name", token)
+        liq_ratio  = round(vol_24h / mktcap * 100, 2) if mktcap > 0 else None
         supply_pct = round(circ / total * 100, 1) if circ and total and total > 0 else None
 
-        from datetime import datetime
-        hora_utc = datetime.utcnow().hour
+        prompt = f"""Evalúa este proyecto crypto solo con los datos disponibles:
 
-        prompt = f"""Analiza el proyecto crypto con símbolo {token} (par: {pair}).
-Nombre conocido: {cg.get("name", token)} | Categorías: {cats} | Ranking: #{rank}
+TOKEN: {token} | Nombre: {name}
+Categoría CoinGecko: {cats}
+Ranking global: #{rank}
+Market Cap: {f"{mktcap:,.0f} USD" if mktcap else "desconocido"}
+Vol 24h: {vol_24h:,.0f} USD | Ratio Vol/MC: {f"{liq_ratio}%" if liq_ratio else "desconocido"}
+Vol 7d: {vol_7d:,.0f} USD
+Cambio 24h: {chg_24h}% | 7d: {change_7d or "desconocido"}% | 30d: {chg_30d or "desconocido"}%
+Distancia ATH: {f"{ath_pct:.1f}%" if ath_pct else "desconocido"}
+Supply circulante/total: {f"{supply_pct}%" if supply_pct else "desconocido"}
+Antigüedad: {genesis}
 
-Datos de mercado:
-- Market Cap: {f"{mktcap:,.0f} USD" if mktcap else "desconocido"}
-- Volumen 24h: {vol_24h:,.0f} USD | Ratio Vol/MC: {f"{liq_ratio}%" if liq_ratio else "desconocido"}
-- Cambio 7d: {change_7d or "desconocido"}% | Cambio 30d: {chg_30d or "desconocido"}%
-- Distancia ATH: {f"{ath_pct:.1f}%" if ath_pct else "desconocido"} | Genesis: {genesis}
+Basándote en estos datos, determina si es un proyecto serio o especulativo.
+Categorías como "meme","gaming","defi","layer-1","layer-2" ayudan mucho.
+Ranking top 200 = proyecto consolidado. Sin ranking = muy especulativo.
+Ratio Vol/MC alto = mucha actividad relativa (bueno o manipulación).
+Devuelve el JSON con score y resumen."""
 
-INVESTIGA con web_search si es un proyecto con utilidad real o una memecoin/shitcoin.
-Busca: "{token} cryptocurrency" y "{cg.get("name", token)} crypto project whitepaper team"
-Luego devuelve el JSON con score (1-10) y resumen de máximo 15 palabras."""
-
-        headers = {
-            "x-api-key": ANTHROPIC_KEY,
-            "anthropic-version": "2023-06-01",
-            "content-type": "application/json"
-        }
-        tools = [{"type": "web_search_20250305", "name": "web_search"}]
-        messages = [{"role": "user", "content": prompt}]
-
-        # Multi-turn: hasta 3 rondas para completar búsquedas
-        for _ in range(4):
-            r = requests.post(
-                "https://api.anthropic.com/v1/messages",
-                headers=headers,
-                json={
-                    "model": "claude-sonnet-4-6",
-                    "max_tokens": 1024,
-                    "system": SYSTEM_FUNDAMENTAL,
-                    "tools": tools,
-                    "messages": messages
-                },
-                timeout=30
-            )
-            if r.status_code != 200:
-                print(f"AI Fund HTTP {r.status_code}: {r.text[:200]}")
-                break
-            resp = r.json()
-            blocks = resp.get("content", [])
-            stop_reason = resp.get("stop_reason", "")
-
-            # Añadir respuesta del asistente al historial
-            messages.append({"role": "assistant", "content": blocks})
-
-            # Si terminó normalmente, extraer el JSON de texto
-            if stop_reason == "end_turn":
-                text = ""
-                for block in blocks:
-                    if block.get("type") == "text":
-                        text = block.get("text", "").strip()
-                if text:
-                    text = text.replace("```json","").replace("```","").strip()
-                    data = _json.loads(text)
-                    result = {"score": float(data["score"]), "resumen": data.get("resumen", "")}
-                    _ai_score_cache[cache_key] = result
-                    _ai_score_cache_time[cache_key] = now
-                    return result
-                break
-
-            # Si usó herramienta, procesar resultados y continuar
-            if stop_reason == "tool_use":
-                tool_results = []
-                for block in blocks:
-                    if block.get("type") == "tool_use":
-                        tool_id = block.get("id")
-                        tool_name = block.get("name")
-                        # El resultado de web_search lo maneja Anthropic internamente
-                        # Solo necesitamos continuar el loop
-                        tool_results.append({
-                            "type": "tool_result",
-                            "tool_use_id": tool_id,
-                            "content": "Search completed"
-                        })
-                if tool_results:
-                    messages.append({"role": "user", "content": tool_results})
-                continue
-            break
-
+        r = requests.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={
+                "x-api-key": ANTHROPIC_KEY,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json"
+            },
+            json={
+                "model": "claude-haiku-4-5-20251001",
+                "max_tokens": 150,
+                "system": SYSTEM_FUNDAMENTAL,
+                "messages": [{"role": "user", "content": prompt}]
+            },
+            timeout=15
+        )
+        if r.status_code == 200:
+            text = r.json()["content"][0]["text"].strip()
+            text = text.replace("```json","").replace("```","").strip()
+            match = _re.search(r'\{[^}]+\}', text)
+            if match:
+                text = match.group(0)
+            data = _json.loads(text)
+            result = {"score": float(data["score"]), "resumen": data.get("resumen", "")}
+            _ai_score_cache[cache_key] = result
+            _ai_score_cache_time[cache_key] = now
+            return result
+        else:
+            print(f"AI Fund HTTP {r.status_code}: {r.text[:200]}")
     except Exception as e:
         print(f"AI Fundamental error {pair}: {e}")
     return None
@@ -1657,9 +1597,13 @@ def createTGmessage(tradeDF, pair, volInEUR, priceDiff, wsnames, pairs, ticker=N
 
 def telegram_bot_sendtext(bot_message):
     url = f'https://api.telegram.org/bot{bot_token}/sendMessage'
-    params = {'chat_id': bot_chatID, 'parse_mode': "Markdown", 'text': bot_message}
-    params['disable_web_page_preview'] = True
-    response = requests.post(url, params=params)
+    payload = {
+        'chat_id': bot_chatID,
+        'parse_mode': "Markdown",
+        'text': bot_message,
+        'link_preview_options': {'is_disabled': True}
+    }
+    response = requests.post(url, json=payload)
     return response.json()
 
 
@@ -1825,12 +1769,26 @@ def tradeLoop(pairsList, wsnames, pairs, eurPrices, label):
                             _recent_signals[pair] = [t for t in _recent_signals[pair] if t > cutoff]
                             count_recent = len(_recent_signals[pair])
                         print(f"📊 [{label}] {pair} — {count_recent} señales en {RAFAGA_WINDOW_MIN}min")
+                        # Llamada solo si 2+ señales en 7 días Y score >= 7
                         if count_recent >= RAFAGA_MIN_COUNT:
-                            threading.Thread(
-                                target=twilio_llamada,
-                                args=(pair, priceDiff, volInEUR),
-                                daemon=True
-                            ).start()
+                            # Verificar score del último análisis
+                            last_score = None
+                            fund_cached = _ai_score_cache.get(f"fund_{pair}")
+                            tec_key = next((k for k in _ai_score_cache if k.startswith(f"tec_{pair}_")), None)
+                            tec_cached = _ai_score_cache.get(tec_key) if tec_key else None
+                            if fund_cached and tec_cached:
+                                last_score = round((fund_cached["score"] + tec_cached["score"]) / 2, 1)
+                            elif tec_cached:
+                                last_score = tec_cached["score"]
+                            elif fund_cached:
+                                last_score = fund_cached["score"]
+                            print(f"📊 Twilio check: {pair} | señales 7d: {count_recent} | score: {last_score}")
+                            if last_score is None or last_score >= 7:
+                                threading.Thread(
+                                    target=twilio_llamada,
+                                    args=(pair, priceDiff, volInEUR),
+                                    daemon=True
+                                ).start()
                 else:
                     print(".", end="", flush=True)
             if(datetime.now().second == 0):
