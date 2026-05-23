@@ -400,37 +400,72 @@ INVESTIGA con web_search si es un proyecto con utilidad real o una memecoin/shit
 Busca: "{token} cryptocurrency" y "{cg.get("name", token)} crypto project whitepaper team"
 Luego devuelve el JSON con score (1-10) y resumen de máximo 15 palabras."""
 
-        r = requests.post(
-            "https://api.anthropic.com/v1/messages",
-            headers={
-                "x-api-key": ANTHROPIC_KEY,
-                "anthropic-version": "2023-06-01",
-                "content-type": "application/json"
-            },
-            json={
-                "model": "claude-haiku-4-5-20251001",
-                "max_tokens": 1024,
-                "system": SYSTEM_FUNDAMENTAL,
-                "tools": [{"type": "web_search_20250305", "name": "web_search"}],
-                "messages": [{"role": "user", "content": prompt}]
-            },
-            timeout=30
-        )
-        if r.status_code == 200:
-            # Extraer solo bloques de texto (ignorar tool_use y tool_result)
-            blocks = r.json().get("content", [])
-            text = ""
-            for block in blocks:
-                if block.get("type") == "text":
-                    text = block.get("text", "").strip()
-            if not text:
-                return None
-            text = text.replace("```json","").replace("```","").strip()
-            data = _json.loads(text)
-            result = {"score": float(data["score"]), "resumen": data.get("resumen", "")}
-            _ai_score_cache[cache_key] = result
-            _ai_score_cache_time[cache_key] = now
-            return result
+        headers = {
+            "x-api-key": ANTHROPIC_KEY,
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json"
+        }
+        tools = [{"type": "web_search_20250305", "name": "web_search"}]
+        messages = [{"role": "user", "content": prompt}]
+
+        # Multi-turn: hasta 3 rondas para completar búsquedas
+        for _ in range(4):
+            r = requests.post(
+                "https://api.anthropic.com/v1/messages",
+                headers=headers,
+                json={
+                    "model": "claude-sonnet-4-6",
+                    "max_tokens": 1024,
+                    "system": SYSTEM_FUNDAMENTAL,
+                    "tools": tools,
+                    "messages": messages
+                },
+                timeout=30
+            )
+            if r.status_code != 200:
+                print(f"AI Fund HTTP {r.status_code}: {r.text[:200]}")
+                break
+            resp = r.json()
+            blocks = resp.get("content", [])
+            stop_reason = resp.get("stop_reason", "")
+
+            # Añadir respuesta del asistente al historial
+            messages.append({"role": "assistant", "content": blocks})
+
+            # Si terminó normalmente, extraer el JSON de texto
+            if stop_reason == "end_turn":
+                text = ""
+                for block in blocks:
+                    if block.get("type") == "text":
+                        text = block.get("text", "").strip()
+                if text:
+                    text = text.replace("```json","").replace("```","").strip()
+                    data = _json.loads(text)
+                    result = {"score": float(data["score"]), "resumen": data.get("resumen", "")}
+                    _ai_score_cache[cache_key] = result
+                    _ai_score_cache_time[cache_key] = now
+                    return result
+                break
+
+            # Si usó herramienta, procesar resultados y continuar
+            if stop_reason == "tool_use":
+                tool_results = []
+                for block in blocks:
+                    if block.get("type") == "tool_use":
+                        tool_id = block.get("id")
+                        tool_name = block.get("name")
+                        # El resultado de web_search lo maneja Anthropic internamente
+                        # Solo necesitamos continuar el loop
+                        tool_results.append({
+                            "type": "tool_result",
+                            "tool_use_id": tool_id,
+                            "content": "Search completed"
+                        })
+                if tool_results:
+                    messages.append({"role": "user", "content": tool_results})
+                continue
+            break
+
     except Exception as e:
         print(f"AI Fundamental error {pair}: {e}")
     return None
@@ -1623,6 +1658,7 @@ def createTGmessage(tradeDF, pair, volInEUR, priceDiff, wsnames, pairs, ticker=N
 def telegram_bot_sendtext(bot_message):
     url = f'https://api.telegram.org/bot{bot_token}/sendMessage'
     params = {'chat_id': bot_chatID, 'parse_mode': "Markdown", 'text': bot_message}
+    params['disable_web_page_preview'] = True
     response = requests.post(url, params=params)
     return response.json()
 
