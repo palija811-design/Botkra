@@ -61,6 +61,14 @@ def init_db():
         )
     """)
     conn.execute("""
+        CREATE TABLE IF NOT EXISTS fundamental_scores (
+            pair       TEXT PRIMARY KEY,
+            score      REAL NOT NULL,
+            resumen    TEXT,
+            timestamp  TEXT NOT NULL
+        )
+    """)
+    conn.execute("""
         CREATE TABLE IF NOT EXISTS price_tracking (
             id          INTEGER PRIMARY KEY AUTOINCREMENT,
             signal_id   INTEGER NOT NULL,
@@ -286,6 +294,43 @@ Score alto = alta probabilidad de que el precio vuelva al nivel del mecho.
 Responde SOLO con el JSON puro, sin backticks, sin texto adicional, sin markdown."""
 
 
+FUNDAMENTAL_TTL_DAYS = 30  # días antes de volver a pedir análisis fundamental
+
+def load_fundamental_from_db(pair):
+    """Carga el score fundamental de la BD si existe y no ha caducado."""
+    from datetime import datetime, timedelta
+    try:
+        conn = sqlite3.connect(DB_PATH, timeout=5)
+        row = conn.execute(
+            "SELECT score, resumen, timestamp FROM fundamental_scores WHERE pair=?",
+            (pair,)
+        ).fetchone()
+        conn.close()
+        if row:
+            ts = datetime.fromisoformat(row[2])
+            if datetime.utcnow() - ts < timedelta(days=FUNDAMENTAL_TTL_DAYS):
+                return {"score": row[0], "resumen": row[1]}
+    except Exception as e:
+        print(f"Error loading fundamental from DB: {e}")
+    return None
+
+def save_fundamental_to_db(pair, score, resumen):
+    """Guarda el score fundamental en la BD."""
+    from datetime import datetime
+    try:
+        with db_lock:
+            conn = sqlite3.connect(DB_PATH, timeout=10)
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("""
+                INSERT OR REPLACE INTO fundamental_scores (pair, score, resumen, timestamp)
+                VALUES (?, ?, ?, ?)
+            """, (pair, score, resumen, datetime.utcnow().isoformat()))
+            conn.commit()
+            conn.close()
+    except Exception as e:
+        print(f"Error saving fundamental to DB: {e}")
+
+
 def get_coingecko_full(pair):
     """Obtiene datos completos de CoinGecko para el agente fundamental."""
     import time as _time
@@ -332,12 +377,21 @@ def get_coingecko_full(pair):
 
 
 def ai_fundamental_score(pair, ticker, change_7d):
-    """Agente de análisis fundamental con Haiku — evalúa el proyecto con datos de CoinGecko."""
+    """Agente de análisis fundamental con Haiku — evalúa el proyecto con datos de CoinGecko.
+    Guarda resultado en BD con TTL de 30 días para no repetir llamadas a la IA."""
     import time as _time, json as _json, re as _re
     cache_key = f"fund_{pair}"
     now = _time.time()
+    # 1. Caché en memoria (sesión actual)
     if cache_key in _ai_score_cache and now - _ai_score_cache_time.get(cache_key, 0) < AI_CACHE_TTL:
         return _ai_score_cache[cache_key]
+    # 2. BD persistente (sobrevive reinicios, válido 30 días)
+    db_result = load_fundamental_from_db(pair)
+    if db_result:
+        print(f"📚 Fundamental {pair} desde BD: {db_result['score']}/10")
+        _ai_score_cache[cache_key] = db_result
+        _ai_score_cache_time[cache_key] = now
+        return db_result
     if not ANTHROPIC_KEY:
         return None
     try:
@@ -403,6 +457,9 @@ Devuelve el JSON con score y resumen."""
             result = {"score": float(data["score"]), "resumen": data.get("resumen", "")}
             _ai_score_cache[cache_key] = result
             _ai_score_cache_time[cache_key] = now
+            # Guardar en BD para persistir 30 días
+            save_fundamental_to_db(pair, result["score"], result["resumen"])
+            print(f"💾 Fundamental {pair} guardado en BD: {result['score']}/10")
             return result
         else:
             print(f"AI Fund HTTP {r.status_code}: {r.text[:200]}")
