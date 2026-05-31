@@ -1007,51 +1007,40 @@ async function loadAnalizar(){
   const min=document.getElementById('analizar-min').value;
   const el=document.getElementById('analizar-grid');
   el.innerHTML='<div class="no-data">Cargando...</div>';
-
   let groups;
   try {
-    groups=await(await fetch(`/api/analizar?window=${win}&min=${min}`)).json();
+    const r = await fetch('/api/analizar?window='+win+'&min='+min);
+    groups = await r.json();
   } catch(e){
     el.innerHTML='<div class="no-data">Error cargando datos</div>';
     return;
   }
-
   if(!groups||groups.length===0){
-    el.innerHTML='<div class="no-data">No hay pares con actividad repetida en este periodo.<br>Prueba ampliar la ventana de tiempo.</div>';
+    el.innerHTML='<div class="no-data">No hay pares con actividad repetida en este periodo.</div>';
     document.getElementById('analizar-count').textContent='';
     return;
   }
-
-  document.getElementById('analizar-count').textContent=`${groups.length} pares activos`;
-
-  // Fetch ticker batch for all pairs
-  const pairs=groups.map(g=>g.pair).join(',');
+  document.getElementById('analizar-count').textContent=groups.length+' pares activos';
+  const pairs=groups.map(function(g){return g.pair;}).join(',');
   let tickers={};
-  try {
-    tickers=await(await fetch('/api/ticker_batch?pairs='+encodeURIComponent(pairs))).json();
-  } catch(e){}
-
-  // Filter by 50K vol 24h
-  const minScore = parseFloat(document.getElementById('analizar-score').value)||0;
-  const filtered=groups.filter(g=>{
+  try { tickers=await(await fetch('/api/ticker_batch?pairs='+encodeURIComponent(pairs))).json(); } catch(e){}
+  const minScore=parseFloat(document.getElementById('analizar-score').value)||0;
+  const filtered=groups.filter(function(g){
     const t=tickers[g.pair];
-    const volOk = !t || t.vol_24h_base>=50000;
-    const scoreOk = minScore===0 || (g.ai_score!==null && g.ai_score!==undefined && g.ai_score>=minScore);
-    return volOk && scoreOk;
+    const volOk=!t||t.vol_24h_base>=50000;
+    const scoreOk=minScore===0||(g.ai_score!==null&&g.ai_score!==undefined&&g.ai_score>=minScore);
+    return volOk&&scoreOk;
   });
-
   if(filtered.length===0){
-    el.innerHTML='<div class="no-data">No hay pares con 50.000 USD+ de volumen en 24h en este periodo.</div>';
+    el.innerHTML='<div class="no-data">No hay pares con 50K$+ vol 24h en este periodo.</div>';
     return;
   }
-
-  document.getElementById('analizar-count').textContent=`${filtered.length} pares activos (vol 24h >50K$)`;
-
-  el.innerHTML=filtered.map(g=>{
+  document.getElementById('analizar-count').textContent=filtered.length+' pares activos (vol 24h >50K$)';
+  var html='';
+  filtered.forEach(function(g){
     const t=tickers[g.pair]||{};
     const minAgo=Math.floor((Date.now()-new Date(g.last_signal).getTime())/60000);
-    const isHot=minAgo<15;
-    const isWarm=minAgo<60;
+    const isHot=minAgo<15; const isWarm=minAgo<60;
     const cardClass=isHot?'hot':isWarm?'warm':'';
     const badgeClass=isHot?'badge-hot':'badge-warm';
     const badgeText=isHot?'🔴 AHORA':'🟡 RECIENTE';
@@ -1059,70 +1048,66 @@ async function loadAnalizar(){
     const sideText=g.dominant_side==='b'?'🍏 COMPRA':'🍎 VENTA';
     const changeClass=t.change_24h>0?'pos':t.change_24h<0?'neg':'neu';
     const kUrl=krakenUrl(g.pair);
-
-    const signalRows=(g.signals||[]).slice(0,5).map(s=>`
-      <div class="signal-mini">
-        <span class="${s.side==='b'?'buy':'sell'}">${s.side==='b'?'🍏':'🍎'}</span>
-        <span class="neu">+${s.price_diff_pct}%</span>
-        <span class="vol">${fmt(s.volume_eur)}$</span>
-        <span class="muted" style="font-size:0.6rem">${s.timestamp.replace('T',' ').substring(11,19)}</span>
-        <button class="btn-sm" onclick="openChart(${s.id},'${g.pair}','${s.side}',${s.price_to})" style="margin-left:auto">📈</button>
-      </div>`).join('');
-
-    return `<div class="analizar-card ${cardClass}">
-      <div class="card-header">
-        <div style="flex:1">
-          <div style="display:flex;align-items:center;gap:0.5rem">
-            <div class="card-pair">${g.pair}</div>
-            <div style="font-size:0.6rem;color:var(--muted)">hace ${timeAgo(g.last_signal)}</div>
-          </div>
-          <div class="card-badges" style="margin-top:0.4rem">
-            <span class="badge ${badgeClass}">${badgeText}</span>
-            <span class="badge badge-count">${g.count} señales</span>
-            <span class="badge ${sideClass}">${sideText}</span>
-          </div>
-        </div>
-        ${g.ai_score!==null&&g.ai_score!==undefined?`<div style="text-align:center;min-width:56px">
-          <div style="font-family:'Syne',sans-serif;font-size:1.6rem;font-weight:800;color:${g.ai_score>=7?'var(--green)':g.ai_score>=5?'var(--orange)':'var(--red)'};line-height:1">${g.ai_score}</div>
-          <div style="font-size:0.55rem;color:var(--muted);margin-top:0.1rem">/ 10</div>
-          ${g.ai_fund!==null?`<div style="font-size:0.55rem;color:var(--muted)">F:${g.ai_fund} T:${g.ai_tec||"—"}</div>`:''}
-          ${g.ai_fund!==null&&g.ai_fund!==undefined?'<div style="font-size:0.55rem;color:var(--muted)">F:'+g.ai_fund+' T:'+(g.ai_tec||"—")+"</div>":''}
-      </div>
-      <div class="card-metrics">
-        <div class="card-metric">
-          <div class="card-metric-label">Diff media</div>
-          <div class="card-metric-value neu">${g.avg_diff}%</div>
-        </div>
-        <div class="card-metric">
-          <div class="card-metric-label">Cambio 24h</div>
-          <div class="card-metric-value ${changeClass}">${t.change_24h!==undefined?(t.change_24h>0?'+':'')+t.change_24h+'%':'—'}</div>
-        </div>
-        <div class="card-metric">
-          <div class="card-metric-label">Cambio 7d</div>
-          <div class="card-metric-value ${g.change_7d>0?'pos':g.change_7d<0?'neg':'muted'}">${g.change_7d!==null&&g.change_7d!==undefined?(g.change_7d>0?'+':'')+g.change_7d+'%':'—'}</div>
-        </div>
-        <div class="card-metric">
-          <div class="card-metric-label">Vol 24h</div>
-          <div class="card-metric-value vol">${t.vol_24h_base!==undefined?fmt(t.vol_24h_base)+'$':'—'}</div>
-        </div>
-        <div class="card-metric">
-          <div class="card-metric-label">Vol 7d</div>
-          <div class="card-metric-value vol">${t.vol_7d_usd!==undefined&&t.vol_7d_usd?fmt(t.vol_7d_usd)+'$':'—'}</div>
-        </div>
-      </div>
-      <div class="card-signals">${signalRows}</div>
-      <div class="ai-detail">
-        ${g.ai_fund_txt?`<div class="ai-detail-row"><span class="ai-label">📊 Fund:</span><span style="font-style:italic;color:var(--muted)">${g.ai_fund_txt}</span></div>`:''}
-        ${g.ai_tec_txt?`<div class="ai-detail-row"><span class="ai-label">📈 Téc:</span><span style="font-style:italic;color:var(--muted)">${g.ai_tec_txt}</span></div>`:''}
-        ${!g.ai_fund_txt&&!g.ai_tec_txt&&g.ai_summary?`<div style="font-style:italic;color:var(--muted)">💡 ${g.ai_summary}</div>`:''}
-      </div>
-      <div class="card-footer">
-        <a href="${kUrl}" target="_blank" class="kraken-btn">📊 Kraken</a>
-        <a href="${g.cmc_url}" target="_blank" class="kraken-btn" style="background:#0d1f3c;border-color:#1a4080">🦎 CoinGecko</a>
-        <button class="btn-sm" onclick="goToPar('${g.pair}')">🔍 Historial</button>
-      </div>
-    </div>`;
-  }).join('');
+    const sc=g.ai_score;
+    const scColor=sc>=7?'var(--green)':sc>=5?'var(--orange)':'var(--red)';
+    var scoreHtml='';
+    if(sc!==null&&sc!==undefined){
+      scoreHtml='<div style="text-align:center;min-width:56px">';
+      scoreHtml+='<div style="font-family:Syne,sans-serif;font-size:1.6rem;font-weight:800;color:'+scColor+';line-height:1">'+sc+'</div>';
+      scoreHtml+='<div style="font-size:0.55rem;color:var(--muted);margin-top:0.1rem">/ 10</div>';
+      if(g.ai_fund!==null&&g.ai_fund!==undefined){
+        scoreHtml+='<div style="font-size:0.55rem;color:var(--muted)">F:'+g.ai_fund+' T:'+(g.ai_tec||'—')+'</div>';
+      }
+      scoreHtml+='</div>';
+    }
+    var signalRows='';
+    var sigs=(g.signals||[]).slice(0,5);
+    sigs.forEach(function(s){
+      signalRows+='<div class="signal-mini">';
+      signalRows+='<span class="'+(s.side==='b'?'buy':'sell')+'">'+(s.side==='b'?'🍏':'🍎')+'</span>';
+      signalRows+='<span class="neu">'+s.price_diff_pct+'%</span>';
+      signalRows+='<span class="vol">'+fmt(s.volume_eur)+'$</span>';
+      signalRows+='<span class="muted" style="font-size:0.6rem">'+s.timestamp.replace('T',' ').substring(11,19)+'</span>';
+      signalRows+='<button class="btn-sm" onclick="openChart('+s.id+',\''+g.pair+'\',\''+s.side+'\','+s.price_to+')" style="margin-left:auto">📈</button>';
+      signalRows+='</div>';
+    });
+    var aiDetail='';
+    if(g.ai_fund_txt||g.ai_tec_txt){
+      aiDetail='<div class="ai-detail">';
+      if(g.ai_fund_txt) aiDetail+='<div class="ai-detail-row"><span class="ai-label">📊 Fund:</span><span style="font-style:italic;color:var(--muted)">'+g.ai_fund_txt+'</span></div>';
+      if(g.ai_tec_txt)  aiDetail+='<div class="ai-detail-row"><span class="ai-label">📈 Téc:</span><span style="font-style:italic;color:var(--muted)">'+g.ai_tec_txt+'</span></div>';
+      aiDetail+='</div>';
+    }
+    html+='<div class="analizar-card '+cardClass+'">';
+    html+='<div class="card-header">';
+    html+='<div style="flex:1">';
+    html+='<div style="display:flex;align-items:center;gap:0.5rem">';
+    html+='<div class="card-pair">'+g.pair+'</div>';
+    html+='<div style="font-size:0.6rem;color:var(--muted)">hace '+timeAgo(g.last_signal)+'</div>';
+    html+='</div>';
+    html+='<div class="card-badges" style="margin-top:0.4rem">';
+    html+='<span class="badge '+badgeClass+'">'+badgeText+'</span>';
+    html+='<span class="badge badge-count">'+g.count+' señales</span>';
+    html+='<span class="badge '+sideClass+'">'+sideText+'</span>';
+    html+='</div></div>';
+    html+=scoreHtml;
+    html+='</div>';
+    html+='<div class="card-metrics">';
+    html+='<div class="card-metric"><div class="card-metric-label">Diff media</div><div class="card-metric-value neu">'+g.avg_diff+'%</div></div>';
+    html+='<div class="card-metric"><div class="card-metric-label">Cambio 24h</div><div class="card-metric-value '+(t.change_24h>0?'pos':t.change_24h<0?'neg':'muted')+'">'+(t.change_24h!==undefined?(t.change_24h>0?'+':'')+t.change_24h+'%':'—')+'</div></div>';
+    html+='<div class="card-metric"><div class="card-metric-label">Cambio 7d</div><div class="card-metric-value '+(g.change_7d>0?'pos':g.change_7d<0?'neg':'muted')+'">'+(g.change_7d!==null&&g.change_7d!==undefined?(g.change_7d>0?'+':'')+g.change_7d+'%':'—')+'</div></div>';
+    html+='<div class="card-metric"><div class="card-metric-label">Vol 24h</div><div class="card-metric-value vol">'+(t.vol_24h_base!==undefined?fmt(t.vol_24h_base)+'$':'—')+'</div></div>';
+    html+='<div class="card-metric"><div class="card-metric-label">Vol 7d</div><div class="card-metric-value vol">'+(t.vol_7d_usd?fmt(t.vol_7d_usd)+'$':'—')+'</div></div>';
+    html+='</div>';
+    html+='<div class="card-signals">'+signalRows+'</div>';
+    html+=aiDetail;
+    html+='<div class="card-footer">';
+    html+='<a href="'+kUrl+'" target="_blank" class="kraken-btn">📊 Kraken</a>';
+    html+='<a href="'+g.cmc_url+'" target="_blank" class="kraken-btn" style="background:#0d1f3c;border-color:#1a4080">🦎 CoinGecko</a>';
+    html+='<button class="btn-sm" onclick="goToPar(\''+g.pair+'\')">🔍 Historial</button>';
+    html+='</div></div>';
+  });
+  el.innerHTML=html;
 }
 
 async function loadPar(){
