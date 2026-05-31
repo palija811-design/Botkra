@@ -1274,6 +1274,14 @@ def api_tracking(signal_id):
 
 @app.route('/api/analizar')
 def api_analizar():
+    try:
+        return _api_analizar_inner()
+    except Exception as e:
+        print(f"Error in api_analizar: {e}")
+        import traceback; traceback.print_exc()
+        return jsonify([])
+
+def _api_analizar_inner():
     from datetime import datetime, timedelta
     from collections import defaultdict
     window_min  = int(flask_request.args.get('window', 60))
@@ -1329,6 +1337,14 @@ def api_analizar():
             ai_summary = ""
             ai_fund = ai_tec = None
             ai_fund_txt = ai_tec_txt = ""
+        try:
+            c7d = get_7d_change(pair)
+        except Exception:
+            c7d = None
+        try:
+            cmc = get_cmc_url(token)
+        except Exception:
+            cmc = f"https://www.coingecko.com/en/coins/{token.lower()}"
         result.append({
             'pair': pair,
             'count': len(sigs),
@@ -1337,8 +1353,8 @@ def api_analizar():
             'total_vol': round(sum(vols), 0),
             'last_signal': t_last,
             'signals': sigs,
-            'change_7d': get_7d_change(pair),
-            'cmc_url': get_cmc_url(token),
+            'change_7d': c7d,
+            'cmc_url': cmc,
             'ai_score': ai_score_final,
             'ai_summary': ai_summary,
             'ai_fund': ai_fund,
