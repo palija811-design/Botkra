@@ -1272,6 +1272,21 @@ def api_tracking(signal_id):
     signal = db_get("SELECT * FROM signals WHERE id=?", [signal_id])
     return jsonify({"signal": signal[0] if signal else {}, "tracking": rows})
 
+@app.route('/api/top_scores')
+def api_top_scores():
+    """Top 7 pares con mejor score fundamental en el último mes."""
+    from datetime import datetime, timedelta
+    since = (datetime.utcnow() - timedelta(days=30)).isoformat()
+    rows = db_get("""
+        SELECT fs.pair, fs.score, fs.resumen
+        FROM fundamental_scores fs
+        WHERE fs.timestamp >= ?
+        ORDER BY fs.score DESC
+        LIMIT 7
+    """, [since])
+    return jsonify(rows)
+
+
 @app.route('/api/analizar')
 def api_analizar():
     from datetime import datetime, timedelta
