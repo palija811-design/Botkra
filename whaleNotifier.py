@@ -1084,7 +1084,7 @@ async function loadAnalizar(){
           <span class="badge ${badgeClass}">${badgeText}</span>
           <span class="badge badge-count">${g.count} señales</span>
           <span class="badge ${sideClass}">${sideText}</span>
-          ${g.ai_score!==null&&g.ai_score!==undefined?`<span class="badge" style="background:${g.ai_score>=7?'#00ff8820':g.ai_score>=5?'#ffaa0020':'#ff446620'};color:${g.ai_score>=7?'var(--green)':g.ai_score>=5?'var(--orange)':'var(--red)'};border:1px solid ${g.ai_score>=7?'var(--green)':g.ai_score>=5?'var(--orange)':'var(--red)'}">${g.ai_score>=7?"🟢":g.ai_score>=5?"🟡":"🔴"} ${g.ai_score}/10${g.ai_fund!==null&&g.ai_fund!==undefined?" (F:"+g.ai_fund+" T:"+(g.ai_tec||"—")+")"\:""}</span>`:''}
+          ${g.ai_score!==null&&g.ai_score!==undefined?`<span class="badge" style="background:${g.ai_score>=7?'#00ff8820':g.ai_score>=5?'#ffaa0020':'#ff446620'};color:${g.ai_score>=7?'var(--green)':g.ai_score>=5?'var(--orange)':'var(--red)'};border:1px solid ${g.ai_score>=7?'var(--green)':g.ai_score>=5?'var(--orange)':'var(--red)'}">⭐ ${g.ai_score}/10${g.ai_fund!==null&&g.ai_fund!==undefined?" (F:"+g.ai_fund+" T:"+(g.ai_tec||"—")+")":""}</span>`:''}
         </div>
       </div>
       <div class="card-metrics">
