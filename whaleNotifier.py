@@ -1337,10 +1337,8 @@ def _api_analizar_inner():
             ai_summary = ""
             ai_fund = ai_tec = None
             ai_fund_txt = ai_tec_txt = ""
-        try:
-            c7d = get_7d_change(pair)
-        except Exception:
-            c7d = None
+        # 7d y cmc se calculan rápido sin bloquear (cmc es solo string, 7d desde cache)
+        c7d = _cg_cache.get("7d_" + token.replace(".S","").replace(".P",""))
         try:
             cmc = get_cmc_url(token)
         except Exception:
@@ -1384,38 +1382,21 @@ def api_par():
 
 @app.route('/api/top_scores')
 def api_top_scores():
-    """Top 7 proyectos con mejor score fundamental en los últimos 30 días."""
-    from datetime import datetime, timedelta
-    since = (datetime.utcnow() - timedelta(days=30)).isoformat()
-    # Get pairs with fundamental scores in DB
-    rows = db_get("""
-        SELECT f.pair, f.score, f.resumen, f.timestamp,
-               COUNT(s.id) as num_signals,
-               ROUND(AVG(s.price_diff_pct), 2) as avg_diff,
-               ROUND(AVG(s.volume_eur), 0) as avg_vol
-        FROM fundamental_scores f
-        JOIN signals s ON s.pair LIKE '%' || SUBSTR(f.pair, 1, INSTR(f.pair,'/')-1) || '%'
-        WHERE s.timestamp >= ?
-        GROUP BY f.pair
-        ORDER BY f.score DESC
-        LIMIT 7
-    """, [since])
-    # Also get ticker data for each
-    result = []
-    for row in rows:
-        ticker = get_ticker_24h(row['pair'])
-        result.append({
-            'pair':        row['pair'],
-            'score':       row['score'],
-            'resumen':     row['resumen'],
-            'timestamp':   row['timestamp'],
-            'num_signals': row['num_signals'],
-            'avg_diff':    row['avg_diff'],
-            'avg_vol':     row['avg_vol'],
-            'change_24h':  ticker.get('change_24h') if ticker else None,
-            'vol_24h':     ticker.get('vol_24h_base') if ticker else None,
-        })
-    return jsonify(result)
+    """Top 7 proyectos con mejor score fundamental en los últimos 30 días. Solo BD, sin llamadas externas."""
+    try:
+        from datetime import datetime, timedelta
+        since = (datetime.utcnow() - timedelta(days=30)).isoformat()
+        rows = db_get("""
+            SELECT pair, score, resumen, timestamp
+            FROM fundamental_scores
+            WHERE timestamp >= ?
+            ORDER BY score DESC
+            LIMIT 7
+        """, [since])
+        return jsonify(rows)
+    except Exception as e:
+        print(f"Error top_scores: {e}")
+        return jsonify([])
 
 
 @app.route('/api/winrate')
@@ -1433,12 +1414,21 @@ def api_winrate():
 def api_ticker_batch():
     pairs = flask_request.args.get('pairs', '')
     if not pairs: return jsonify({})
+    pair_list = [p.strip() for p in pairs.split(',') if p.strip()]
     result = {}
-    for pair in pairs.split(','):
-        pair = pair.strip()
-        if pair:
-            data = get_ticker_24h(pair)
-            if data: result[pair] = data
+    import concurrent.futures
+    try:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as ex:
+            futures = {ex.submit(get_ticker_24h, p): p for p in pair_list}
+            for fut in concurrent.futures.as_completed(futures, timeout=20):
+                p = futures[fut]
+                try:
+                    data = fut.result()
+                    if data: result[p] = data
+                except Exception:
+                    pass
+    except Exception as e:
+        print(f"ticker_batch error: {e}")
     return jsonify(result)
 
 @app.route('/api/ticker24h')
