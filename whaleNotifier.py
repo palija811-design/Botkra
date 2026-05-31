@@ -1068,9 +1068,7 @@ async function loadAnalizar(){
       signalRows+='<span class="neu">'+s.price_diff_pct+'%</span>';
       signalRows+='<span class="vol">'+fmt(s.volume_eur)+'$</span>';
       signalRows+='<span class="muted" style="font-size:0.6rem">'+s.timestamp.replace('T',' ').substring(11,19)+'</span>';
-      signalRows+='<button class="btn-sm" onclick="openChart('+s.id+',\''+g.pair+'\',\''+s.side+'\','+s.price_to+')" style="margin-left:auto">📈</button>';
-      signalRows+='</div>';
-    });
+      signalRows+='<button class="btn-sm" onclick="openChart('+s.id+',this.dataset.pair,this.dataset.side,'+s.price_to+')" data-pair="'+g.pair+'" data-side="'+s.side+'" style="margin-left:auto">📈</button>';
     var aiDetail='';
     if(g.ai_fund_txt||g.ai_tec_txt){
       aiDetail='<div class="ai-detail">';
