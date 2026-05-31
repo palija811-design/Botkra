@@ -978,28 +978,6 @@ async function loadTopScores(){
   } catch(e){ console.log('top scores err',e); }
 }
 
-    el.innerHTML = data.map(d => {
-      const sc = d.score;
-      const color = sc>=7?'var(--green)':sc>=5?'var(--orange)':'var(--red)';
-      const ch24 = d.change_24h!==null&&d.change_24h!==undefined
-        ? `<span class="${d.change_24h>=0?'pos':'neg'}">${d.change_24h>0?'+':''}${d.change_24h}%</span>`
-        : '—';
-      return `<div class="score-chip" onclick="goToPar('${d.pair}')">
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <div class="score-chip-pair">${d.pair}</div>
-          <div class="score-chip-score" style="color:${color}">⭐ ${sc}/10</div>
-        </div>
-        <div class="score-chip-resumen">${d.resumen||''}</div>
-        <div class="score-chip-meta">
-          <span>${d.num_signals} señales</span>
-          <span>·</span>
-          <span>24h: ${ch24}</span>
-          ${d.vol_24h?`<span>· ${fmt(d.vol_24h)}$</span>`:''}
-        </div>
-      </div>`;
-    }).join('');
-  } catch(e){ console.log('top scores err',e); }
-}
 
 async function loadAll(){
   await Promise.all([loadStats(), loadAnalizar(), loadTopScores()]);
@@ -1108,7 +1086,7 @@ async function loadAnalizar(){
           <div style="font-family:'Syne',sans-serif;font-size:1.6rem;font-weight:800;color:${g.ai_score>=7?'var(--green)':g.ai_score>=5?'var(--orange)':'var(--red)'};line-height:1">${g.ai_score}</div>
           <div style="font-size:0.55rem;color:var(--muted);margin-top:0.1rem">/ 10</div>
           ${g.ai_fund!==null?`<div style="font-size:0.55rem;color:var(--muted)">F:${g.ai_fund} T:${g.ai_tec||"—"}</div>`:''}
-        </div>`:''}
+          ${g.ai_fund!==null&&g.ai_fund!==undefined?'<div style="font-size:0.55rem;color:var(--muted)">F:'+g.ai_fund+' T:'+(g.ai_tec||"—")+"</div>":''}
       </div>
       <div class="card-metrics">
         <div class="card-metric">
