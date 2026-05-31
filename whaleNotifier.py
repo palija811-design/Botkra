@@ -959,7 +959,7 @@ async function loadTopScores() {
     data.forEach(function(d) {
       var sc = d.score;
       var color = sc >= 7 ? 'var(--green)' : sc >= 5 ? 'var(--orange)' : 'var(--red)';
-      h += '<div class="chip" onclick="goToPar(\'' + d.pair.replace("'", "") + '\')" style="border-color:' + color + '33">';
+      h += '<div class="chip" data-pair="' + d.pair.replace(/"/g, '') + '" onclick="goToPar(this.dataset.pair)" style="border-color:' + color + '33">';
       h += '<span style="color:var(--accent)">' + d.pair + '</span>';
       h += '<span style="color:' + color + ';font-weight:700;margin-left:0.3rem">&#11088;' + sc + '</span>';
       h += '</div>';
