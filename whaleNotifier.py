@@ -751,6 +751,17 @@ tr:hover td{background:var(--surface)}
 .sec-title{font-family:'Syne',sans-serif;font-size:0.9rem;font-weight:700;color:var(--accent);padding:1rem 1.5rem 0.3rem}
 .sec-sub{font-size:0.65rem;color:var(--muted);padding:0 1.5rem 0.75rem;line-height:1.6}
 .chip-wrap{display:flex;flex-wrap:wrap;gap:0.3rem;padding:0.6rem 1.5rem;border-bottom:1px solid var(--border)}
+.top-scores-wrap{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:0.5rem;padding:0.75rem 1.5rem;border-bottom:2px solid var(--border);background:#050a10}
+.top-scores-label{font-size:0.62rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;padding:0.5rem 1.5rem 0;font-family:"Syne",sans-serif;font-weight:700}
+.score-chip{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:0.6rem 0.75rem;cursor:pointer;transition:all 0.15s}
+.score-chip:hover{border-color:var(--accent);transform:translateY(-1px)}
+.score-chip-pair{font-family:"Syne",sans-serif;font-size:0.8rem;font-weight:800;color:var(--accent)}
+.score-chip-score{font-size:0.7rem;font-weight:700;margin-top:0.2rem}
+.score-chip-resumen{font-size:0.58rem;color:var(--muted);margin-top:0.2rem;line-height:1.3}
+.score-chip-meta{display:flex;gap:0.4rem;margin-top:0.3rem;font-size:0.58rem;color:var(--muted)}
+.ai-detail{padding:0.5rem 0.8rem;border-top:1px solid var(--border);font-size:0.64rem}
+.ai-detail-row{display:flex;gap:0.4rem;align-items:flex-start;margin-bottom:0.2rem}
+.ai-label{color:var(--muted);white-space:nowrap;min-width:40px}
 .chip{background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:0.15rem 0.45rem;font-size:0.65rem;cursor:pointer;transition:all 0.15s}
 .chip:hover{border-color:var(--accent);color:var(--accent)}
 .chip .cnt{color:var(--muted);margin-left:0.2rem}
@@ -816,6 +827,9 @@ tr:hover td{background:var(--surface)}
 </header>
 <div class="stats" id="stats"></div>
 <div class="chip-wrap" id="topPairs"></div>
+
+<div class="top-scores-label">⭐ Top proyectos último mes por score IA</div>
+<div class="top-scores-wrap" id="topScores"><div style="color:var(--muted);font-size:0.7rem;padding:0.5rem">Cargando...</div></div>
 
 <div class="tabs">
   <div class="tab active" onclick="switchTab('analizar')">🔍 Analizar</div>
@@ -941,8 +955,39 @@ function switchTab(tab){
   if(tab==='signals') loadSignals();
 }
 
+async function loadTopScores(){
+  try {
+    const data = await(await fetch('/api/top_scores')).json();
+    const el = document.getElementById('topScores');
+    if(!data||data.length===0){
+      el.innerHTML='<div style="color:var(--muted);font-size:0.7rem;padding:0.25rem">Sin datos aún — los scores aparecen tras las primeras señales analizadas.</div>';
+      return;
+    }
+    el.innerHTML = data.map(d => {
+      const sc = d.score;
+      const color = sc>=7?'var(--green)':sc>=5?'var(--orange)':'var(--red)';
+      const ch24 = d.change_24h!==null&&d.change_24h!==undefined
+        ? `<span class="${d.change_24h>=0?'pos':'neg'}">${d.change_24h>0?'+':''}${d.change_24h}%</span>`
+        : '—';
+      return `<div class="score-chip" onclick="goToPar('${d.pair}')">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div class="score-chip-pair">${d.pair}</div>
+          <div class="score-chip-score" style="color:${color}">⭐ ${sc}/10</div>
+        </div>
+        <div class="score-chip-resumen">${d.resumen||''}</div>
+        <div class="score-chip-meta">
+          <span>${d.num_signals} señales</span>
+          <span>·</span>
+          <span>24h: ${ch24}</span>
+          ${d.vol_24h?`<span>· ${fmt(d.vol_24h)}$</span>`:''}
+        </div>
+      </div>`;
+    }).join('');
+  } catch(e){ console.log('top scores err',e); }
+}
+
 async function loadAll(){
-  await Promise.all([loadStats(), loadAnalizar()]);
+  await Promise.all([loadStats(), loadAnalizar(), loadTopScores()]);
   document.getElementById('lastUpdate').textContent='Actualizado: '+new Date().toLocaleTimeString();
 }
 
@@ -1039,7 +1084,7 @@ async function loadAnalizar(){
           <span class="badge ${badgeClass}">${badgeText}</span>
           <span class="badge badge-count">${g.count} señales</span>
           <span class="badge ${sideClass}">${sideText}</span>
-          ${g.ai_score!==null&&g.ai_score!==undefined?`<span class="badge" style="background:${g.ai_score>=7?'#00ff8820':g.ai_score>=5?'#ffaa0020':'#ff446620'};color:${g.ai_score>=7?'var(--green)':g.ai_score>=5?'var(--orange)':'var(--red)'};border:1px solid ${g.ai_score>=7?'var(--green)':g.ai_score>=5?'var(--orange)':'var(--red)'}">⭐ ${g.ai_score}/10</span>`:''}
+          ${g.ai_score!==null&&g.ai_score!==undefined?`<span class="badge" style="background:${g.ai_score>=7?'#00ff8820':g.ai_score>=5?'#ffaa0020':'#ff446620'};color:${g.ai_score>=7?'var(--green)':g.ai_score>=5?'var(--orange)':'var(--red)'};border:1px solid ${g.ai_score>=7?'var(--green)':g.ai_score>=5?'var(--orange)':'var(--red)'}">${g.ai_score>=7?"🟢":g.ai_score>=5?"🟡":"🔴"} ${g.ai_score}/10${g.ai_fund!==null&&g.ai_fund!==undefined?" (F:"+g.ai_fund+" T:"+(g.ai_tec||"—")+")"\:""}</span>`:''}
         </div>
       </div>
       <div class="card-metrics">
@@ -1260,12 +1305,10 @@ def api_analizar():
         vols  = [s['volume_eur'] for s in sigs]
         t_last = sigs[-1]['timestamp']
         token = pair.split('/')[0] if '/' in pair else pair
-        # AI score from cache only (don't block the API response)
+        # AI score: caché memoria → BD → None
         ai_cache_key_f = f"fund_{pair}"
-        ai_cache_key_t = f"tec_{pair}"
-        fund_cached = _ai_score_cache.get(ai_cache_key_f)
+        fund_cached = _ai_score_cache.get(ai_cache_key_f) or load_fundamental_from_db(pair)
         tec_cached  = None
-        # Find latest tec score for this pair
         for k, v in _ai_score_cache.items():
             if k.startswith(f"tec_{pair}_"):
                 tec_cached = v
@@ -1273,15 +1316,29 @@ def api_analizar():
         if fund_cached and tec_cached:
             ai_score_final = round((fund_cached["score"] + tec_cached["score"]) / 2, 1)
             ai_summary = tec_cached.get("resumen") or fund_cached.get("resumen") or ""
+            ai_fund    = fund_cached["score"]
+            ai_tec     = tec_cached["score"]
+            ai_fund_txt = fund_cached.get("resumen","")
+            ai_tec_txt  = tec_cached.get("resumen","")
         elif fund_cached:
             ai_score_final = fund_cached["score"]
             ai_summary = fund_cached.get("resumen", "")
+            ai_fund    = fund_cached["score"]
+            ai_tec     = None
+            ai_fund_txt = fund_cached.get("resumen","")
+            ai_tec_txt  = ""
         elif tec_cached:
             ai_score_final = tec_cached["score"]
             ai_summary = tec_cached.get("resumen", "")
+            ai_fund    = None
+            ai_tec     = tec_cached["score"]
+            ai_fund_txt = ""
+            ai_tec_txt  = tec_cached.get("resumen","")
         else:
             ai_score_final = None
             ai_summary = ""
+            ai_fund = ai_tec = None
+            ai_fund_txt = ai_tec_txt = ""
         result.append({
             'pair': pair,
             'count': len(sigs),
@@ -1293,7 +1350,11 @@ def api_analizar():
             'change_7d': get_7d_change(pair),
             'cmc_url': get_cmc_url(token),
             'ai_score': ai_score_final,
-            'ai_summary': ai_summary
+            'ai_summary': ai_summary,
+            'ai_fund': ai_fund,
+            'ai_tec': ai_tec,
+            'ai_fund_txt': ai_fund_txt,
+            'ai_tec_txt': ai_tec_txt
         })
     result.sort(key=lambda x: x['last_signal'], reverse=True)
     return jsonify(result)
@@ -1314,6 +1375,42 @@ def api_par():
         enriched.append({**s,'price_extremo':s['price_to'],'rev_1h':r1,'rev_4h':r4,'rev_24h':r24})
     avg = lambda lst: round(sum(lst)/len(lst),1) if lst else None
     return jsonify({'total':len(signals),'rev_1h_media':avg(revs_1h),'rev_4h_media':avg(revs_4h),'rev_24h_media':avg(revs_24h),'vol_min':round(min(vols),0),'vol_avg':round(sum(vols)/len(vols),0),'avg_diff':round(sum(diffs)/len(diffs),2),'signals':enriched[:50]})
+
+@app.route('/api/top_scores')
+def api_top_scores():
+    """Top 7 proyectos con mejor score fundamental en los últimos 30 días."""
+    from datetime import datetime, timedelta
+    since = (datetime.utcnow() - timedelta(days=30)).isoformat()
+    # Get pairs with fundamental scores in DB
+    rows = db_get("""
+        SELECT f.pair, f.score, f.resumen, f.timestamp,
+               COUNT(s.id) as num_signals,
+               ROUND(AVG(s.price_diff_pct), 2) as avg_diff,
+               ROUND(AVG(s.volume_eur), 0) as avg_vol
+        FROM fundamental_scores f
+        JOIN signals s ON s.pair LIKE '%' || SUBSTR(f.pair, 1, INSTR(f.pair,'/')-1) || '%'
+        WHERE s.timestamp >= ?
+        GROUP BY f.pair
+        ORDER BY f.score DESC
+        LIMIT 7
+    """, [since])
+    # Also get ticker data for each
+    result = []
+    for row in rows:
+        ticker = get_ticker_24h(row['pair'])
+        result.append({
+            'pair':        row['pair'],
+            'score':       row['score'],
+            'resumen':     row['resumen'],
+            'timestamp':   row['timestamp'],
+            'num_signals': row['num_signals'],
+            'avg_diff':    row['avg_diff'],
+            'avg_vol':     row['avg_vol'],
+            'change_24h':  ticker.get('change_24h') if ticker else None,
+            'vol_24h':     ticker.get('vol_24h_base') if ticker else None,
+        })
+    return jsonify(result)
+
 
 @app.route('/api/winrate')
 def api_winrate():
