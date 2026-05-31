@@ -1056,7 +1056,7 @@ async function loadAnalizar(){
       scoreHtml+='<div style="font-family:Syne,sans-serif;font-size:1.6rem;font-weight:800;color:'+scColor+';line-height:1">'+sc+'</div>';
       scoreHtml+='<div style="font-size:0.55rem;color:var(--muted);margin-top:0.1rem">/ 10</div>';
       if(g.ai_fund!==null&&g.ai_fund!==undefined){
-        scoreHtml+='<div style="font-size:0.55rem;color:var(--muted)">F:'+g.ai_fund+' T:'+(g.ai_tec||'—')+'</div>';
+        scoreHtml+='<div style="font-size:0.55rem;color:var(--muted)">F:'+g.ai_fund+' T:'+(g.ai_tec||'N/D')+'</div>';
       }
       scoreHtml+='</div>';
     }
@@ -1092,17 +1092,16 @@ async function loadAnalizar(){
     html+='</div>';
     html+='<div class="card-metrics">';
     html+='<div class="card-metric"><div class="card-metric-label">Diff media</div><div class="card-metric-value neu">'+g.avg_diff+'%</div></div>';
-    html+='<div class="card-metric"><div class="card-metric-label">Cambio 24h</div><div class="card-metric-value '+(t.change_24h>0?'pos':t.change_24h<0?'neg':'muted')+'">'+(t.change_24h!==undefined?(t.change_24h>0?'+':'')+t.change_24h+'%':'—')+'</div></div>';
-    html+='<div class="card-metric"><div class="card-metric-label">Cambio 7d</div><div class="card-metric-value '+(g.change_7d>0?'pos':g.change_7d<0?'neg':'muted')+'">'+(g.change_7d!==null&&g.change_7d!==undefined?(g.change_7d>0?'+':'')+g.change_7d+'%':'—')+'</div></div>';
-    html+='<div class="card-metric"><div class="card-metric-label">Vol 24h</div><div class="card-metric-value vol">'+(t.vol_24h_base!==undefined?fmt(t.vol_24h_base)+'$':'—')+'</div></div>';
-    html+='<div class="card-metric"><div class="card-metric-label">Vol 7d</div><div class="card-metric-value vol">'+(t.vol_7d_usd?fmt(t.vol_7d_usd)+'$':'—')+'</div></div>';
+    html+='<div class="card-metric"><div class="card-metric-label">Cambio 24h</div><div class="card-metric-value '+(t.change_24h>0?'pos':t.change_24h<0?'neg':'muted')+'">'+(t.change_24h!==undefined?(t.change_24h>0?'+':'')+t.change_24h+'%':'N/D')+'</div></div>';
+    html+='<div class="card-metric"><div class="card-metric-label">Cambio 7d</div><div class="card-metric-value '+(g.change_7d>0?'pos':g.change_7d<0?'neg':'muted')+'">'+(g.change_7d!==null&&g.change_7d!==undefined?(g.change_7d>0?'+':'')+g.change_7d+'%':'N/D')+'</div></div>';
+    html+='<div class="card-metric"><div class="card-metric-label">Vol 24h</div><div class="card-metric-value vol">'+(t.vol_24h_base!==undefined?fmt(t.vol_24h_base)+'$':'N/D')+'</div></div>';
+    html+='<div class="card-metric"><div class="card-metric-label">Vol 7d</div><div class="card-metric-value vol">'+(t.vol_7d_usd?fmt(t.vol_7d_usd)+'$':'N/D')+'</div></div>';
     html+='</div>';
     html+='<div class="card-signals">'+signalRows+'</div>';
     html+=aiDetail;
     html+='<div class="card-footer">';
     html+='<a href="'+kUrl+'" target="_blank" class="kraken-btn">📊 Kraken</a>';
     html+='<a href="'+g.cmc_url+'" target="_blank" class="kraken-btn" style="background:#0d1f3c;border-color:#1a4080">🦎 CoinGecko</a>';
-    html+='<button class="btn-sm" onclick="goToPar(this.dataset.pair)" data-pair="'+g.pair+'">🔍 Historial</button>';
     html+='<button class="btn-sm" onclick="goToPar(this.dataset.pair)" data-pair="'+g.pair+'">🔍 Historial</button>';
   });
   el.innerHTML=html;
