@@ -1110,7 +1110,11 @@ async function loadAnalizar(){
         </div>
       </div>
       <div class="card-signals">${signalRows}</div>
-      ${g.ai_summary?`<div style="padding:0.4rem 0.8rem;font-size:0.64rem;color:var(--muted);border-top:1px solid var(--border);font-style:italic">💡 ${g.ai_summary}</div>`:''}
+      <div class="ai-detail">
+        ${g.ai_fund_txt?`<div class="ai-detail-row"><span class="ai-label">📊 Fund:</span><span style="font-style:italic;color:var(--muted)">${g.ai_fund_txt}</span></div>`:''}
+        ${g.ai_tec_txt?`<div class="ai-detail-row"><span class="ai-label">📈 Téc:</span><span style="font-style:italic;color:var(--muted)">${g.ai_tec_txt}</span></div>`:''}
+        ${!g.ai_fund_txt&&!g.ai_tec_txt&&g.ai_summary?`<div style="font-style:italic;color:var(--muted)">💡 ${g.ai_summary}</div>`:''}
+      </div>
       <div class="card-footer">
         <a href="${kUrl}" target="_blank" class="kraken-btn">📊 Kraken</a>
         <a href="${g.cmc_url}" target="_blank" class="kraken-btn" style="background:#0d1f3c;border-color:#1a4080">🦎 CoinGecko</a>
