@@ -1102,8 +1102,8 @@ async function loadAnalizar(){
     html+='<div class="card-footer">';
     html+='<a href="'+kUrl+'" target="_blank" class="kraken-btn">📊 Kraken</a>';
     html+='<a href="'+g.cmc_url+'" target="_blank" class="kraken-btn" style="background:#0d1f3c;border-color:#1a4080">🦎 CoinGecko</a>';
-    html+='<button class="btn-sm" onclick="goToPar(\''+g.pair+'\')">🔍 Historial</button>';
-    html+='</div></div>';
+    html+='<button class="btn-sm" onclick="goToPar(this.dataset.pair)" data-pair="'+g.pair+'">🔍 Historial</button>';
+    html+='<button class="btn-sm" onclick="goToPar(this.dataset.pair)" data-pair="'+g.pair+'">🔍 Historial</button>';
   });
   el.innerHTML=html;
 }
