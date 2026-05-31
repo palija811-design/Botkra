@@ -826,10 +826,7 @@ tr:hover td{background:var(--surface)}
   <button class="btn-ghost" onclick="loadAll()">↻ Actualizar</button>
 </header>
 <div class="stats" id="stats"></div>
-<div class="chip-wrap" id="topPairs"></div>
-
-<div class="top-scores-label">⭐ Top proyectos último mes por score IA</div>
-<div class="top-scores-wrap" id="topScores"><div style="color:var(--muted);font-size:0.7rem;padding:0.5rem">Cargando...</div></div>
+<div class="chip-wrap" id="topScores"><div style="color:var(--muted);font-size:0.65rem">Cargando scores...</div></div>
 
 <div class="tabs">
   <div class="tab active" onclick="switchTab('analizar')">🔍 Analizar</div>
@@ -854,6 +851,13 @@ tr:hover td{background:var(--surface)}
       <option value="2" selected>Min 2 señales</option>
       <option value="3">Min 3 señales</option>
       <option value="4">Min 4 señales</option>
+    </select>
+    <select id="analizar-score" onchange="loadAnalizar()">
+      <option value="0">Todos los scores</option>
+      <option value="5">Score ≥ 5</option>
+      <option value="6">Score ≥ 6</option>
+      <option value="7">Score ≥ 7 ⭐</option>
+      <option value="8">Score ≥ 8 🟢</option>
     </select>
     <button onclick="loadAnalizar()">Filtrar</button>
     <span id="analizar-count" style="color:var(--muted);font-size:0.7rem"></span>
@@ -960,9 +964,20 @@ async function loadTopScores(){
     const data = await(await fetch('/api/top_scores')).json();
     const el = document.getElementById('topScores');
     if(!data||data.length===0){
-      el.innerHTML='<div style="color:var(--muted);font-size:0.7rem;padding:0.25rem">Sin datos aún — los scores aparecen tras las primeras señales analizadas.</div>';
+      el.innerHTML='<div style="color:var(--muted);font-size:0.65rem">Sin scores aún</div>';
       return;
     }
+    el.innerHTML = data.map(d => {
+      const sc = d.score;
+      const color = sc>=7?'var(--green)':sc>=5?'var(--orange)':'var(--red)';
+      return `<div class="chip" onclick="goToPar('${d.pair}')" title="${d.resumen||''}" style="border-color:${color}20">
+        <span style="color:var(--accent)">${d.pair}</span>
+        <span style="color:${color};font-weight:700;margin-left:0.3rem">⭐${sc}</span>
+      </div>`;
+    }).join('');
+  } catch(e){ console.log('top scores err',e); }
+}
+
     el.innerHTML = data.map(d => {
       const sc = d.score;
       const color = sc>=7?'var(--green)':sc>=5?'var(--orange)':'var(--red)';
@@ -1000,8 +1015,7 @@ async function loadStats(){
     <div class="stat"><div class="stat-label">Con tracking</div><div class="stat-value" style="color:var(--orange)">${s.tracked}</div></div>
     <div class="stat"><div class="stat-label">Diff media</div><div class="stat-value">${s.avg_diff}%</div></div>
     <div class="stat"><div class="stat-label">Vol medio $</div><div class="stat-value">${fmt(s.avg_vol)}</div></div>`;
-  document.getElementById('topPairs').innerHTML=s.top_pairs.map(p=>
-    `<div class="chip" onclick="goToPar('${p.pair}')">${p.pair}<span class="cnt">${p.count}</span></div>`).join('');
+  // topPairs now replaced by topScores - loaded separately
 }
 
 function goToPar(pair){
@@ -1040,9 +1054,12 @@ async function loadAnalizar(){
   } catch(e){}
 
   // Filter by 50K vol 24h
+  const minScore = parseFloat(document.getElementById('analizar-score').value)||0;
   const filtered=groups.filter(g=>{
     const t=tickers[g.pair];
-    return !t || t.vol_24h_base>=50000;
+    const volOk = !t || t.vol_24h_base>=50000;
+    const scoreOk = minScore===0 || (g.ai_score!==null && g.ai_score!==undefined && g.ai_score>=minScore);
+    return volOk && scoreOk;
   });
 
   if(filtered.length===0){
@@ -1076,16 +1093,22 @@ async function loadAnalizar(){
 
     return `<div class="analizar-card ${cardClass}">
       <div class="card-header">
-        <div>
-          <div class="card-pair">${g.pair}</div>
-          <div style="font-size:0.6rem;color:var(--muted);margin-top:0.1rem">hace ${timeAgo(g.last_signal)}</div>
+        <div style="flex:1">
+          <div style="display:flex;align-items:center;gap:0.5rem">
+            <div class="card-pair">${g.pair}</div>
+            <div style="font-size:0.6rem;color:var(--muted)">hace ${timeAgo(g.last_signal)}</div>
+          </div>
+          <div class="card-badges" style="margin-top:0.4rem">
+            <span class="badge ${badgeClass}">${badgeText}</span>
+            <span class="badge badge-count">${g.count} señales</span>
+            <span class="badge ${sideClass}">${sideText}</span>
+          </div>
         </div>
-        <div class="card-badges">
-          <span class="badge ${badgeClass}">${badgeText}</span>
-          <span class="badge badge-count">${g.count} señales</span>
-          <span class="badge ${sideClass}">${sideText}</span>
-          ${g.ai_score!==null&&g.ai_score!==undefined?`<span class="badge" style="background:${g.ai_score>=7?'#00ff8820':g.ai_score>=5?'#ffaa0020':'#ff446620'};color:${g.ai_score>=7?'var(--green)':g.ai_score>=5?'var(--orange)':'var(--red)'};border:1px solid ${g.ai_score>=7?'var(--green)':g.ai_score>=5?'var(--orange)':'var(--red)'}">⭐ ${g.ai_score}/10${g.ai_fund!==null&&g.ai_fund!==undefined?" (F:"+g.ai_fund+" T:"+(g.ai_tec||"—")+")":""}</span>`:''}
-        </div>
+        ${g.ai_score!==null&&g.ai_score!==undefined?`<div style="text-align:center;min-width:56px">
+          <div style="font-family:'Syne',sans-serif;font-size:1.6rem;font-weight:800;color:${g.ai_score>=7?'var(--green)':g.ai_score>=5?'var(--orange)':'var(--red)'};line-height:1">${g.ai_score}</div>
+          <div style="font-size:0.55rem;color:var(--muted);margin-top:0.1rem">/ 10</div>
+          ${g.ai_fund!==null?`<div style="font-size:0.55rem;color:var(--muted)">F:${g.ai_fund} T:${g.ai_tec||"—"}</div>`:''}
+        </div>`:''}
       </div>
       <div class="card-metrics">
         <div class="card-metric">
