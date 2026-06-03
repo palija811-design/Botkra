@@ -266,32 +266,38 @@ Claves para el score:
 
 Responde SOLO con el JSON puro, sin backticks, sin markdown."""
 
-SYSTEM_TECNICO = """Eres un analista experto en análisis técnico de criptomonedas especializado en detección de mechazos institucionales.
-Tu objetivo es evaluar señales de movimientos bruscos de ballenas para determinar si son oportunidades de entrada.
-Cuando recibas datos de una señal, devuelve SOLO un JSON con este formato exacto:
-{"score": 7.5, "resumen": "Texto breve de máximo 15 palabras explicando el score"}
+SYSTEM_TECNICO = """Eres un analista técnico experto en mechazos de ballenas. Tu ESTRATEGIA BASE es REVERSIÓN: cuando una ballena empuja el precio bruscamente, apuestas a que el precio vuelve al nivel previo. Pero NO toda señal revierte: debes decidir según el contexto si conviene operar en reversión, seguir el movimiento, o no operar.
 
-El score va de 1 a 10 donde:
-- 1-3: Señal de baja calidad, probable manipulación o sin contexto favorable
-- 4-5: Señal moderada, contexto mixto
-- 6-7: Mecho interesante con probabilidad de reversión moderada
-- 8-9: Mecho fuerte con alta probabilidad de reversión o continuación
-- 10: Señal excepcional con todas las confirmaciones
+Devuelve SOLO un JSON con este formato exacto:
+{"direccion": "LONG", "score": 7.5, "resumen": "Texto breve de máximo 18 palabras con la dirección y el motivo"}
 
-Factores CLAVE en orden de importancia:
-1. INTENSIDAD: >10% = muy fuerte, >5% = fuerte, 2-5% = moderado
-2. VOLUMEN RELATIVO: vol_señal/vol_24h. >5% = institucional, >1% = relevante
-3. REPETICIÓN: 3+ señales en 7 días = patrón establecido (muy positivo)
-4. LADO + PRECIO: SELL cuando precio cerca del HIGH 24h = resistencia clara (reversión alcista probable)
-         BUY cuando precio cerca del LOW 24h = soporte claro (reversión bajista probable)
-5. HORA: 08-12 UTC y 14-20 UTC = horario de mayor liquidez = señal más fiable
-6. VELOCIDAD: múltiples señales en <30min = acumulación/distribución activa
-7. CONSISTENCIA: mismo lado repetido = convicción direccional
+DIRECCIÓN (3 opciones):
+- "SHORT": ponerse corto / vender. Se usa cuando una COMPRA de ballena parece agotamiento (probable caída).
+- "LONG": ponerse largo / comprar. Se usa cuando una VENTA de ballena parece capitulación (probable rebote).
+- "NEUTRAL": no operar. Cuando hay convicción real de la ballena (la reversión es poco probable) o el contexto es confuso.
 
-Estrategia de mecho: la ballena empuja el precio extremo, nosotros ponemos orden límite en ese nivel esperando reversión.
-Score alto = alta probabilidad de que el precio vuelva al nivel del mecho.
+CÓMO DECIDIR (lógica de reversión):
+1. AGOTAMIENTO vs CONVICCIÓN — lo más importante:
+   - Muchas BALLENAS DISTINTAS (señales separadas >5min) comprando = euforia colectiva = AGOTAMIENTO = reversión probable → SHORT
+   - UNA misma ballena (señales agrupadas <5min) ejecutando en tramos = CONVICCIÓN = reversión poco probable → NEUTRAL
+   - Si la intensidad de los mechazos DECRECE con el tiempo = agotamiento. Si CRECE = convicción.
+2. HISTÓRICO DE REVERSIÓN del par: si mechazos previos revirtieron mucho (% alto) → confía en reversión. Si no revirtieron → NEUTRAL o seguir tendencia.
+3. INTENSIDAD: movimientos >5% tienen más recorrido de reversión que los de 2-3%.
+4. VOLUMEN RELATIVO: vol muy alto respecto al 24h = institucional con convicción = cuidado con reversión.
+5. HORA: 08-20 UTC = más liquidez = reversión más limpia y fiable.
 
-Responde SOLO con el JSON puro, sin backticks, sin texto adicional, sin markdown."""
+SCORE (1-10): mide tu CONFIANZA en la dirección elegida.
+- 8-10: contexto muy claro a favor de la dirección (ej: muchas ballenas distintas + histórico de reversión alto + intensidad fuerte)
+- 6-7: contexto favorable pero con algún factor en contra
+- 4-5: señales mixtas
+- 1-3: poco fiable. Si eliges NEUTRAL el score refleja cuán claro es que NO se debe operar.
+
+El resumen DEBE empezar indicando la acción concreta. Ejemplos:
+"SHORT: 12 ballenas distintas comprando, agotamiento probable, intensidad decreciente"
+"NEUTRAL: una sola ballena acumulando con convicción, reversión improbable"
+"LONG: capitulación vendedora en soporte, histórico de rebote alto"
+
+Responde SOLO con el JSON puro, sin backticks, sin markdown."""
 
 
 FUNDAMENTAL_TTL_DAYS = 30  # días antes de volver a pedir análisis fundamental
@@ -468,35 +474,170 @@ Devuelve el JSON con score y resumen."""
     return None
 
 
+def contar_ballenas_unicas(pair, gap_min=5):
+    """Cuenta ballenas únicas en 7d: señales separadas >gap_min minutos = ballenas distintas.
+    Devuelve (num_ballenas_unicas, num_total_señales, intensidad_creciente)."""
+    from datetime import datetime, timedelta
+    try:
+        since = (datetime.utcnow() - timedelta(days=7)).isoformat()
+        conn = sqlite3.connect(DB_PATH, timeout=5)
+        rows = conn.execute(
+            "SELECT timestamp, price_diff_pct FROM signals WHERE pair=? AND timestamp>=? ORDER BY timestamp ASC",
+            (pair, since)
+        ).fetchall()
+        conn.close()
+        if not rows:
+            return (1, 1, None)
+        # Contar ballenas únicas: nueva ballena si pasan >gap_min desde la anterior
+        ballenas = 1
+        prev = datetime.fromisoformat(rows[0][0])
+        for ts_str, _ in rows[1:]:
+            t = datetime.fromisoformat(ts_str)
+            if (t - prev).total_seconds() / 60 > gap_min:
+                ballenas += 1
+            prev = t
+        # Intensidad creciente o decreciente (comparar primera mitad vs segunda mitad)
+        diffs = [abs(r[1]) for r in rows]
+        intensidad_creciente = None
+        if len(diffs) >= 4:
+            mid = len(diffs) // 2
+            primera = sum(diffs[:mid]) / mid
+            segunda = sum(diffs[mid:]) / (len(diffs) - mid)
+            intensidad_creciente = segunda > primera
+        return (ballenas, len(rows), intensidad_creciente)
+    except Exception as e:
+        print(f"Error contar ballenas {pair}: {e}")
+        return (1, 1, None)
+
+
+def historial_reversion_par(pair):
+    """Analiza reversión REAL de mechazos previos del par considerando el lado de la ballena.
+
+    Reversión real = el precio se movió en dirección CONTRARIA a la ballena.
+    - Ballena compró (b) → precio subió → reversión = precio baja (pct_change < 0)
+    - Ballena vendió (s) → precio bajó → reversión = precio sube (pct_change > 0)
+
+    Devuelve dict con:
+    - pct_revierten: % de mechazos que revirtieron
+    - reversion_media: magnitud media de la reversión (solo de los que revirtieron)
+    - tiempo_medio_min: minutos hasta la reversión máxima
+    - num_muestras: cuántos mechazos analizados
+    None si no hay datos suficientes.
+    """
+    try:
+        conn = sqlite3.connect(DB_PATH, timeout=5)
+        conn.row_factory = sqlite3.Row
+        # Obtener todas las señales del par con tracking
+        signals = conn.execute("""
+            SELECT DISTINCT s.id, s.side
+            FROM signals s JOIN price_tracking pt ON pt.signal_id=s.id
+            WHERE s.pair=?
+        """, (pair,)).fetchall()
+
+        if not signals:
+            conn.close()
+            return None
+
+        revirtieron = 0
+        reversiones_mag = []
+        tiempos = []
+
+        for sig in signals:
+            sig_id = sig["id"]
+            side = sig["side"]
+            # Obtener toda la curva de tracking de esta señal
+            puntos = conn.execute("""
+                SELECT minutes, pct_change FROM price_tracking
+                WHERE signal_id=? ORDER BY minutes ASC
+            """, (sig_id,)).fetchall()
+            if not puntos:
+                continue
+            # Buscar la MÁXIMA reversión (movimiento contrario a la ballena)
+            mejor_reversion = 0
+            tiempo_mejor = None
+            for p in puntos:
+                pct = p["pct_change"]
+                minutos = p["minutes"]
+                # Reversión = movimiento contrario al lado de la ballena
+                if side == "b":
+                    # ballena compró → reversión es precio bajando → pct negativo
+                    rev = -pct  # cuanto más negativo el pct, mayor la reversión
+                else:
+                    # ballena vendió → reversión es precio subiendo → pct positivo
+                    rev = pct
+                if rev > mejor_reversion:
+                    mejor_reversion = rev
+                    tiempo_mejor = minutos
+            # Consideramos que "revirtió" si la reversión superó 0.5%
+            if mejor_reversion >= 0.5:
+                revirtieron += 1
+                reversiones_mag.append(mejor_reversion)
+                if tiempo_mejor:
+                    tiempos.append(tiempo_mejor)
+
+        conn.close()
+        total = len(signals)
+        if total == 0:
+            return None
+        return {
+            "pct_revierten": round(revirtieron / total * 100, 0),
+            "reversion_media": round(sum(reversiones_mag)/len(reversiones_mag), 2) if reversiones_mag else 0,
+            "tiempo_medio_min": round(sum(tiempos)/len(tiempos)) if tiempos else None,
+            "num_muestras": total
+        }
+    except Exception as e:
+        print(f"Error historial reversion {pair}: {e}")
+        return None
+
+
 def ai_tecnico_score(pair, priceDiff, volInEUR, side, num_signals_7d):
-    """Agente de análisis técnico — evalúa la señal."""
-    import time as _time, json as _json
+    """Agente técnico — decide dirección (LONG/SHORT/NEUTRAL) con estrategia de reversión."""
+    import time as _time, json as _json, re as _re
     cache_key = f"tec_{pair}_{round(priceDiff,1)}_{side}"
     now = _time.time()
-    # Cache corto para técnico (15 min) ya que depende de la señal actual
     if cache_key in _ai_score_cache and now - _ai_score_cache_time.get(cache_key, 0) < 900:
         return _ai_score_cache[cache_key]
     if not ANTHROPIC_KEY:
         return None
     try:
-        lado_texto = "COMPRA masiva (bullish)" if side == "b" else "VENTA masiva (bearish)"
+        lado_texto = "COMPRA masiva (empujó precio arriba)" if side == "b" else "VENTA masiva (empujó precio abajo)"
         from datetime import datetime
         hora_utc = datetime.utcnow().hour
         horario = "Europa/America (alta liquidez)" if 8 <= hora_utc <= 20 else "Asia/nocturno (baja liquidez)"
 
-        # Contexto de precio (ticker ya disponible desde get_ai_scores)
-        # Pasamos los datos extra via num_signals_7d (int) — usamos solo lo disponible
-        prompt = f"""Analiza esta señal de mecho de ballena:
-- Par: {pair}
-- Movimiento de precio: {priceDiff:.2f}%
-- Lado de la ballena: {lado_texto}
-- Volumen de la operación: {volInEUR:,.0f} USD
-- Señales del mismo par en últimos 7 días: {num_signals_7d}
-- Hora UTC: {hora_utc}h ({horario})
-- Interpretación del mecho: {"Ballena compró fuerte → precio subió → posible venta límite en el extremo alto esperando caída" if side == "b" else "Ballena vendió fuerte → precio cayó → posible compra límite en el extremo bajo esperando rebote"}
+        # Calcular ballenas únicas e historial de reversión
+        n_ballenas, n_total, intensidad_crec = contar_ballenas_unicas(pair)
+        rev_hist = historial_reversion_par(pair)
+        intensidad_txt = ("creciente (convicción)" if intensidad_crec else "decreciente (agotamiento)") if intensidad_crec is not None else "desconocida"
+        if rev_hist and rev_hist.get("num_muestras", 0) >= 2:
+            t_str = f"~{rev_hist['tiempo_medio_min']}min" if rev_hist.get("tiempo_medio_min") else "variable"
+            rev_txt = (f"{rev_hist['pct_revierten']:.0f}% de {rev_hist['num_muestras']} mechazos revirtieron "
+                       f"(magnitud media {rev_hist['reversion_media']}%, tiempo {t_str})")
+        else:
+            rev_txt = "sin histórico de reversión suficiente aún"
 
-Evalúa la probabilidad de reversión del mecho y si conviene poner una orden límite en el nivel extremo.
-Devuelve el JSON con score y resumen."""
+        prompt = f"""Analiza esta señal de mecho de ballena con estrategia de REVERSIÓN:
+
+DATOS DE LA SEÑAL:
+- Par: {pair}
+- Movimiento: {priceDiff:.2f}% — {lado_texto}
+- Volumen de la operación: {volInEUR:,.0f} USD
+- Hora UTC: {hora_utc}h ({horario})
+
+CONTEXTO ACUMULADO (7 días):
+- Señales totales: {n_total}
+- BALLENAS DISTINTAS estimadas: {n_ballenas} (señales separadas >5min = ballena diferente)
+- Intensidad de los mechazos: {intensidad_txt}
+- Histórico del par: {rev_txt}
+
+INTERPRETACIÓN:
+- {n_ballenas} ballenas distintas {"sugiere presión colectiva / posible agotamiento" if n_ballenas >= 3 else "es actividad puntual"}
+- Si compras de ballena (side=b) parecen agotamiento → dirección SHORT (reversión bajista)
+- Si ventas de ballena (side=s) parecen capitulación → dirección LONG (reversión alcista)
+- Si hay convicción real (una sola ballena, intensidad creciente) → NEUTRAL
+
+Decide dirección (LONG/SHORT/NEUTRAL), score de confianza y resumen.
+Devuelve el JSON."""
 
         r = requests.post(
             "https://api.anthropic.com/v1/messages",
@@ -507,7 +648,7 @@ Devuelve el JSON con score y resumen."""
             },
             json={
                 "model": "claude-haiku-4-5-20251001",
-                "max_tokens": 100,
+                "max_tokens": 150,
                 "system": SYSTEM_TECNICO,
                 "messages": [{"role": "user", "content": prompt}]
             },
@@ -515,13 +656,21 @@ Devuelve el JSON con score y resumen."""
         )
         if r.status_code == 200:
             text = r.json()["content"][0]["text"].strip()
-            # Limpiar backticks de markdown si los hay
             text = text.replace("```json","").replace("```","").strip()
+            match = _re.search(r'\{.*\}', text, _re.DOTALL)
+            if match:
+                text = match.group(0)
             data = _json.loads(text)
-            result = {"score": float(data["score"]), "resumen": data.get("resumen", "")}
+            result = {
+                "score": float(data["score"]),
+                "resumen": data.get("resumen", ""),
+                "direccion": data.get("direccion", "NEUTRAL")
+            }
             _ai_score_cache[cache_key] = result
             _ai_score_cache_time[cache_key] = now
             return result
+        else:
+            print(f"AI Tec HTTP {r.status_code}: {r.text[:200]}")
     except Exception as e:
         print(f"AI Tecnico error {pair}: {e}")
     return None
@@ -557,14 +706,15 @@ def get_ai_scores(pair, priceDiff, volInEUR, side, ticker, change_7d):
             "score_fund":  fund["score"],
             "score_tec":   tec["score"],
             "resumen_fund": fund["resumen"],
-            "resumen_tec":  tec["resumen"]
+            "resumen_tec":  tec["resumen"],
+            "direccion":    tec.get("direccion", "NEUTRAL")
         }
     elif fund:
         return {"score_final": fund["score"], "score_fund": fund["score"], "score_tec": None,
-                "resumen_fund": fund["resumen"], "resumen_tec": ""}
+                "resumen_fund": fund["resumen"], "resumen_tec": "", "direccion": "NEUTRAL"}
     elif tec:
         return {"score_final": tec["score"], "score_fund": None, "score_tec": tec["score"],
-                "resumen_fund": "", "resumen_tec": tec["resumen"]}
+                "resumen_fund": "", "resumen_tec": tec["resumen"], "direccion": tec.get("direccion","NEUTRAL")}
     return None
 
 
@@ -750,8 +900,8 @@ tr:hover td{background:var(--surface)}
 .analizar-card:hover{border-color:var(--accent)}
 .analizar-card.hot{border-color:var(--red)}
 .analizar-card.warm{border-color:var(--orange)}
-.card-header{padding:0.85rem 1rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:0.5rem}
-.card-pair{font-family:"Syne",sans-serif;font-size:1.1rem;font-weight:800;color:var(--accent)}
+.card-header{padding:0.85rem 1rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:0.5rem;flex-wrap:wrap}
+.card-pair{font-family:"Syne",sans-serif;font-size:1.1rem;font-weight:800;color:var(--accent);word-break:break-all}
 .card-badges{display:flex;gap:0.4rem;align-items:center;flex-wrap:wrap;margin-top:0.4rem}
 .badge{font-size:0.62rem;font-weight:700;padding:0.18rem 0.5rem;border-radius:20px;font-family:"Syne",sans-serif}
 .badge-hot{background:#ff446620;color:var(--red);border:1px solid var(--red)}
@@ -759,7 +909,7 @@ tr:hover td{background:var(--surface)}
 .badge-count{background:#00d4ff15;color:var(--accent);border:1px solid var(--accent)}
 .badge-side-b{background:#00ff8815;color:var(--green);border:1px solid var(--green)}
 .badge-side-s{background:#ff446615;color:var(--red);border:1px solid var(--red)}
-.score-big{text-align:center;min-width:56px;padding:0 0.5rem}
+.score-big{text-align:center;min-width:56px;padding:0 0.5rem;flex-shrink:0}
 .score-big-num{font-family:"Syne",sans-serif;font-size:1.6rem;font-weight:800;line-height:1}
 .score-big-sub{font-size:0.55rem;color:var(--muted);margin-top:0.1rem}
 .score-big-detail{font-size:0.55rem;color:var(--muted)}
@@ -1063,6 +1213,18 @@ async function loadAnalizar() {
       if (g.ai_tec_txt)  aiDetail += '<div class="ai-detail-row"><span class="ai-label">Tec:</span><span style="font-style:italic;color:var(--muted)">' + g.ai_tec_txt + '</span></div>';
       aiDetail += '</div>';
     }
+    // Bloque de reversión histórica
+    var revHtml = '';
+    if (g.reversion && g.reversion.num_muestras >= 2) {
+      var rv = g.reversion;
+      var revColor = rv.pct_revierten >= 60 ? 'var(--green)' : rv.pct_revierten >= 40 ? 'var(--orange)' : 'var(--red)';
+      var tiempo = rv.tiempo_medio_min ? (rv.tiempo_medio_min >= 60 ? (rv.tiempo_medio_min/60).toFixed(1) + 'h' : rv.tiempo_medio_min + 'min') : '?';
+      revHtml = '<div style="padding:0.5rem 0.8rem;border-top:1px solid var(--border);font-size:0.62rem">';
+      revHtml += '<span style="color:var(--muted)">REVERSIÓN HISTÓRICA: </span>';
+      revHtml += '<span style="color:' + revColor + ';font-weight:700">' + rv.pct_revierten + '% revierten</span>';
+      revHtml += '<span style="color:var(--muted)"> · magnitud ' + rv.reversion_media + '% · tiempo ~' + tiempo + ' · ' + rv.num_muestras + ' muestras</span>';
+      revHtml += '</div>';
+    }
     html += '<div class="analizar-card ' + cardClass + '">';
     html += '<div class="card-header">';
     html += '<div style="flex:1">';
@@ -1086,6 +1248,7 @@ async function loadAnalizar() {
     html += '</div>';
     html += '<div class="card-signals">' + signalRows + '</div>';
     html += aiDetail;
+    html += revHtml;
     html += '<div class="card-footer">';
     html += '<a href="' + kUrl + '" target="_blank" class="kraken-btn">Kraken</a>';
     html += '<a href="' + g.cmc_url + '" target="_blank" class="kraken-btn" style="background:#0d1f3c;border-color:#1a4080">CoinGecko</a>';
@@ -1358,7 +1521,8 @@ def _api_analizar_inner():
             'ai_fund': ai_fund,
             'ai_tec': ai_tec,
             'ai_fund_txt': ai_fund_txt,
-            'ai_tec_txt': ai_tec_txt
+            'ai_tec_txt': ai_tec_txt,
+            'reversion': historial_reversion_par(pair)
         })
     result.sort(key=lambda x: x['last_signal'], reverse=True)
     return jsonify(result)
@@ -1886,9 +2050,18 @@ def tradeLoop(pairsList, wsnames, pairs, eurPrices, label):
                                 tec_str  = f"{scores['score_tec']:.1f}"  if scores.get('score_tec')  else "—"
                                 rf = scores.get("resumen_fund","")
                                 rt = scores.get("resumen_tec","")
+                                direccion = scores.get("direccion","NEUTRAL")
+                                # Emoji y etiqueta de dirección
+                                if direccion == "LONG":
+                                    dir_tag = "🟩 LONG (comprar)"
+                                elif direccion == "SHORT":
+                                    dir_tag = "🟥 SHORT (vender/corto)"
+                                else:
+                                    dir_tag = "⬜ NEUTRAL (no operar)"
                                 score_msg = (
                                     f"{quality} *Score IA: {score_final}/10*"
                                     f" (Fund: {fund_str} | Téc: {tec_str})"
+                                    f"\n🎯 *{dir_tag}*"
                                     f"\n📌 Fund: _{rf}_"
                                     f"\n📌 Téc: _{rt}_"
                                 )
