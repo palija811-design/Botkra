@@ -819,10 +819,10 @@ tr:hover td{background:var(--surface)}
   <div class="controls">
     <select id="analizar-window" onchange="loadAnalizar()">
       <option value="30">Ultimos 30 min</option>
-      <option value="60" selected>Ultima hora</option>
+      <option value="60">Ultima hora</option>
       <option value="240">Ultimas 4h</option>
       <option value="480">Ultimas 8h</option>
-      <option value="1440">Ultimas 24h</option>
+      <option value="1440" selected>Ultimas 24h</option>
     </select>
     <select id="analizar-min" onchange="loadAnalizar()">
       <option value="2" selected>Min 2 señales</option>
