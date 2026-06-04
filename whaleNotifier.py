@@ -1599,7 +1599,7 @@ async function loadResultados() {
     var gc = barColor(data.acierto_global);
     html += '<div style="text-align:center;margin-bottom:1.5rem;padding:1.2rem;background:var(--surface);border:1px solid var(--border);border-radius:10px">';
     html += '<div style="font-size:0.65rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em">Acierto Global</div>';
-    html += '<div style="font-family:\'Syne\',sans-serif;font-size:3rem;font-weight:800;color:' + gc + ';line-height:1.1">' + data.acierto_global + '%</div>';
+    html += '<div style="font-family:Syne,sans-serif;font-size:3rem;font-weight:800;color:' + gc + ';line-height:1.1">' + data.acierto_global + '%</div>';
     html += '<div style="font-size:0.65rem;color:var(--muted)">' + data.total + ' predicciones evaluadas · ' + data.pendientes + ' pendientes</div>';
     html += '</div>';
     if (data.por_direccion && data.por_direccion.length) html += bloque('Por dirección', data.por_direccion, 'direccion');
