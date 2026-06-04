@@ -573,6 +573,9 @@ def contar_ballenas_por_lado(pair, gap_min=5):
         return (0, 0, 0, 0)
 
 
+_reversion_cache = {}
+_reversion_cache_time = {}
+
 def historial_reversion_par(pair):
     """Analiza reversión REAL de mechazos previos del par considerando el lado de la ballena.
 
@@ -587,6 +590,10 @@ def historial_reversion_par(pair):
     - num_muestras: cuántos mechazos analizados
     None si no hay datos suficientes.
     """
+    import time as _t
+    _now = _t.time()
+    if pair in _reversion_cache and _now - _reversion_cache_time.get(pair, 0) < 1800:
+        return _reversion_cache[pair]
     try:
         conn = sqlite3.connect(DB_PATH, timeout=5)
         conn.row_factory = sqlite3.Row
@@ -599,6 +606,8 @@ def historial_reversion_par(pair):
 
         if not signals:
             conn.close()
+            _reversion_cache[pair] = None
+            _reversion_cache_time[pair] = _now
             return None
 
         revirtieron = 0
@@ -642,12 +651,15 @@ def historial_reversion_par(pair):
         total = len(signals)
         if total == 0:
             return None
-        return {
+        resultado = {
             "pct_revierten": round(revirtieron / total * 100, 0),
             "reversion_media": round(sum(reversiones_mag)/len(reversiones_mag), 2) if reversiones_mag else 0,
             "tiempo_medio_min": round(sum(tiempos)/len(tiempos)) if tiempos else None,
             "num_muestras": total
         }
+        _reversion_cache[pair] = resultado
+        _reversion_cache_time[pair] = _now
+        return resultado
     except Exception as e:
         print(f"Error historial reversion {pair}: {e}")
         return None
@@ -1821,7 +1833,7 @@ def _api_analizar_inner():
             'ai_tec': ai_tec,
             'ai_fund_txt': ai_fund_txt,
             'ai_tec_txt': ai_tec_txt,
-            'reversion': historial_reversion_par(pair)
+            'reversion': _reversion_cache.get(pair)  # solo cache, no bloquea
         })
     result.sort(key=lambda x: x['last_signal'], reverse=True)
     return jsonify(result)
@@ -1901,6 +1913,20 @@ def api_ticker24h():
     data = get_ticker_24h(pair)
     if not data: return jsonify({'error': 'no data'})
     return jsonify(data)
+
+@app.route('/api/reversion')
+def api_reversion():
+    """Devuelve el histórico de reversión de un par (calculado on-demand, cacheado)."""
+    pair = flask_request.args.get('pair', '')
+    if not pair:
+        return jsonify({})
+    try:
+        data = historial_reversion_par(pair)
+        return jsonify(data or {})
+    except Exception as e:
+        print(f"Error api_reversion: {e}")
+        return jsonify({})
+
 
 @app.route('/api/resultados')
 def api_resultados():
