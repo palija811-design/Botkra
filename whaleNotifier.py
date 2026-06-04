@@ -69,6 +69,25 @@ def init_db():
         )
     """)
     conn.execute("""
+        CREATE TABLE IF NOT EXISTS predicciones (
+            signal_id     INTEGER PRIMARY KEY,
+            pair          TEXT NOT NULL,
+            timestamp     TEXT NOT NULL,
+            side          TEXT,
+            price_diff    REAL,
+            vol_usd       REAL,
+            hora_utc      INTEGER,
+            n_ballenas    INTEGER,
+            score_fund    REAL,
+            score_tec     REAL,
+            score_final   REAL,
+            direccion     TEXT,
+            evaluada      INTEGER DEFAULT 0,
+            acierto       INTEGER,
+            reversion_real REAL
+        )
+    """)
+    conn.execute("""
         CREATE TABLE IF NOT EXISTS price_tracking (
             id          INTEGER PRIMARY KEY AUTOINCREMENT,
             signal_id   INTEGER NOT NULL,
@@ -266,36 +285,43 @@ Claves para el score:
 
 Responde SOLO con el JSON puro, sin backticks, sin markdown."""
 
-SYSTEM_TECNICO = """Eres un analista técnico experto en mechazos de ballenas. Tu ESTRATEGIA BASE es REVERSIÓN: cuando una ballena empuja el precio bruscamente, apuestas a que el precio vuelve al nivel previo. Pero NO toda señal revierte: debes decidir según el contexto si conviene operar en reversión, seguir el movimiento, o no operar.
+SYSTEM_TECNICO = """Eres un analista técnico experto en seguir el dinero institucional (ballenas). Tu ESTRATEGIA es OPERAR A FAVOR DE LA TENDENCIA QUE PRONOSTICAN LAS BALLENAS, entrando en un retroceso puntual para conseguir mejor precio.
+
+PRINCIPIO CLAVE: las ballenas pronostican la dirección. Cuanto MÁS dinero mueven y MÁS ballenas distintas se suman en los últimos días, más fiable es la tendencia. Operamos A FAVOR de ellas, NUNCA en contra.
+
+OPERATIVA:
+- Ballenas COMPRANDO fuerte y repetido → tendencia ALCISTA → dirección LONG. Se pone orden de compra límite en un dip puntual y se vende en la continuación alcista (objetivo +5%).
+- Ballenas VENDIENDO fuerte y repetido → tendencia BAJISTA → dirección SHORT. Se entra corto en un repunte puntual y se cierra en la continuación bajista (objetivo +5%).
+- Señales MIXTAS (unas compran, otras venden) o volumen flojo → NEUTRAL, no operar.
 
 Devuelve SOLO un JSON con este formato exacto:
 {"direccion": "LONG", "score": 7.5, "resumen": "Texto breve de máximo 18 palabras con la dirección y el motivo"}
 
-DIRECCIÓN (3 opciones):
-- "SHORT": ponerse corto / vender. Se usa cuando una COMPRA de ballena parece agotamiento (probable caída).
-- "LONG": ponerse largo / comprar. Se usa cuando una VENTA de ballena parece capitulación (probable rebote).
-- "NEUTRAL": no operar. Cuando hay convicción real de la ballena (la reversión es poco probable) o el contexto es confuso.
+DIRECCIÓN:
+- "LONG": ballenas comprando, tendencia alcista fiable. Comprar el dip, vender arriba.
+- "SHORT": ballenas vendiendo, tendencia bajista fiable. Vender el repunte, cerrar abajo.
+- "NEUTRAL": señales mixtas, volumen bajo o sin tendencia clara. No operar.
 
-CÓMO DECIDIR (lógica de reversión):
-1. AGOTAMIENTO vs CONVICCIÓN — lo más importante:
-   - Muchas BALLENAS DISTINTAS (señales separadas >5min) comprando = euforia colectiva = AGOTAMIENTO = reversión probable → SHORT
-   - UNA misma ballena (señales agrupadas <5min) ejecutando en tramos = CONVICCIÓN = reversión poco probable → NEUTRAL
-   - Si la intensidad de los mechazos DECRECE con el tiempo = agotamiento. Si CRECE = convicción.
-2. HISTÓRICO DE REVERSIÓN del par: si mechazos previos revirtieron mucho (% alto) → confía en reversión. Si no revirtieron → NEUTRAL o seguir tendencia.
-3. INTENSIDAD: movimientos >5% tienen más recorrido de reversión que los de 2-3%.
-4. VOLUMEN RELATIVO: vol muy alto respecto al 24h = institucional con convicción = cuidado con reversión.
-5. HORA: 08-20 UTC = más liquidez = reversión más limpia y fiable.
+CÓMO PUNTUAR LA FUERZA DE LA TENDENCIA (factores en orden de importancia):
+1. IMPORTE POR BALLENA: operaciones grandes (vol alto) = más convicción institucional = tendencia más fiable.
+2. NÚMERO DE BALLENAS DISTINTAS (señales separadas >5min) en los últimos días: más ballenas = consenso = tendencia más fuerte. 5+ ballenas mismo lado = señal muy fuerte.
+3. CONSISTENCIA DE DIRECCIÓN: todas comprando (o todas vendiendo) = tendencia clara. Mezcladas = NEUTRAL.
+4. ACUMULACIÓN SOSTENIDA: presión mantenida en 24-48h+ = tendencia establecida.
+5. VOLUMEN RELATIVO vol_señal/vol_24h: alto = movimiento institucional real, no ruido.
+6. HORA: 08-20 UTC más liquidez, continuación más limpia.
 
-SCORE (1-10): mide tu CONFIANZA en la dirección elegida.
-- 8-10: contexto muy claro a favor de la dirección (ej: muchas ballenas distintas + histórico de reversión alto + intensidad fuerte)
-- 6-7: contexto favorable pero con algún factor en contra
-- 4-5: señales mixtas
-- 1-3: poco fiable. Si eliges NEUTRAL el score refleja cuán claro es que NO se debe operar.
+IMPORTANTE: muchas ballenas en la misma dirección NO es agotamiento, es CONFIRMACIÓN de tendencia. Cuantas más, mayor el score a favor.
 
-El resumen DEBE empezar indicando la acción concreta. Ejemplos:
-"SHORT: 12 ballenas distintas comprando, agotamiento probable, intensidad decreciente"
-"NEUTRAL: una sola ballena acumulando con convicción, reversión improbable"
-"LONG: capitulación vendedora en soporte, histórico de rebote alto"
+SCORE (1-10): mide tu CONFIANZA en que la tendencia de las ballenas continuará hasta el objetivo +5%.
+- 8-10: tendencia muy clara (importes grandes + 5+ ballenas mismo lado + consistente + sostenida)
+- 6-7: tendencia favorable con algún factor flojo
+- 4-5: señales mixtas o volumen moderado
+- 1-3: sin tendencia clara. Si eliges NEUTRAL, el score refleja cuán claro es que no hay que operar.
+
+El resumen DEBE empezar con la acción. Ejemplos:
+"LONG: 8 ballenas comprando 2M$ acumulado, tendencia alcista fuerte, entrar en dip"
+"SHORT: 6 ballenas vendiendo sostenido 48h, tendencia bajista clara"
+"NEUTRAL: señales mixtas compra/venta, sin tendencia definida"
 
 Responde SOLO con el JSON puro, sin backticks, sin markdown."""
 
@@ -510,6 +536,43 @@ def contar_ballenas_unicas(pair, gap_min=5):
         return (1, 1, None)
 
 
+def contar_ballenas_por_lado(pair, gap_min=5):
+    """Cuenta ballenas distintas comprando vs vendiendo en 7d y su volumen acumulado.
+    Devuelve (n_compra, n_venta, vol_compra, vol_venta)."""
+    from datetime import datetime, timedelta
+    try:
+        since = (datetime.utcnow() - timedelta(days=7)).isoformat()
+        conn = sqlite3.connect(DB_PATH, timeout=5)
+        rows = conn.execute(
+            "SELECT timestamp, side, volume_eur FROM signals WHERE pair=? AND timestamp>=? ORDER BY timestamp ASC",
+            (pair, since)
+        ).fetchall()
+        conn.close()
+        if not rows:
+            return (0, 0, 0, 0)
+        n_compra = n_venta = 0
+        vol_compra = vol_venta = 0.0
+        prev_time = {}  # por lado, última vez vista
+        for ts_str, side, vol in rows:
+            t = datetime.fromisoformat(ts_str)
+            # Nueva ballena de ese lado si pasaron >gap_min desde la anterior del mismo lado
+            es_nueva = side not in prev_time or (t - prev_time[side]).total_seconds()/60 > gap_min
+            if es_nueva:
+                if side == "b":
+                    n_compra += 1
+                else:
+                    n_venta += 1
+            if side == "b":
+                vol_compra += (vol or 0)
+            else:
+                vol_venta += (vol or 0)
+            prev_time[side] = t
+        return (n_compra, n_venta, round(vol_compra), round(vol_venta))
+    except Exception as e:
+        print(f"Error contar ballenas por lado {pair}: {e}")
+        return (0, 0, 0, 0)
+
+
 def historial_reversion_par(pair):
     """Analiza reversión REAL de mechazos previos del par considerando el lado de la ballena.
 
@@ -616,28 +679,44 @@ def ai_tecnico_score(pair, priceDiff, volInEUR, side, num_signals_7d):
         else:
             rev_txt = "sin histórico de reversión suficiente aún"
 
-        prompt = f"""Analiza esta señal de mecho de ballena con estrategia de REVERSIÓN:
+        # Contar ballenas por dirección
+        n_compra, n_venta, vol_compra, vol_venta = contar_ballenas_por_lado(pair)
+        lado_actual = "COMPRA" if side == "b" else "VENTA"
 
-DATOS DE LA SEÑAL:
+        prompt = f"""Analiza esta acumulación de ballenas para operar A FAVOR de su tendencia:
+
+SEÑAL ACTUAL:
 - Par: {pair}
 - Movimiento: {priceDiff:.2f}% — {lado_texto}
-- Volumen de la operación: {volInEUR:,.0f} USD
+- Volumen de esta operación: {volInEUR:,.0f} USD
 - Hora UTC: {hora_utc}h ({horario})
 
-CONTEXTO ACUMULADO (7 días):
-- Señales totales: {n_total}
-- BALLENAS DISTINTAS estimadas: {n_ballenas} (señales separadas >5min = ballena diferente)
-- Intensidad de los mechazos: {intensidad_txt}
+ACUMULACIÓN DE BALLENAS (últimos 7 días, separadas >5min = ballenas distintas):
+- Ballenas COMPRANDO: {n_compra} (volumen acumulado {vol_compra:,.0f} USD)
+- Ballenas VENDIENDO: {n_venta} (volumen acumulado {vol_venta:,.0f} USD)
+- Total señales: {n_total}
 - Histórico del par: {rev_txt}
 
-INTERPRETACIÓN:
-- {n_ballenas} ballenas distintas {"sugiere presión colectiva / posible agotamiento" if n_ballenas >= 3 else "es actividad puntual"}
-- Si compras de ballena (side=b) parecen agotamiento → dirección SHORT (reversión bajista)
-- Si ventas de ballena (side=s) parecen capitulación → dirección LONG (reversión alcista)
-- Si hay convicción real (una sola ballena, intensidad creciente) → NEUTRAL
+ANÁLISIS DE TENDENCIA:
+- Lado dominante: {"COMPRA (tendencia alcista)" if n_compra > n_venta else "VENTA (tendencia bajista)" if n_venta > n_compra else "MIXTO (sin tendencia clara)"}
+- Si dominan COMPRAS y son consistentes → LONG (comprar dip, vender +5% arriba)
+- Si dominan VENTAS y son consistentes → SHORT (vender repunte, cerrar +5% abajo)
+- Si están equilibradas o el volumen es bajo → NEUTRAL
+- Objetivo de cada operación: +5% a favor de la tendencia de las ballenas
 
+Recuerda: más ballenas + más volumen en la misma dirección = tendencia MÁS fiable (NO agotamiento).
 Decide dirección (LONG/SHORT/NEUTRAL), score de confianza y resumen.
 Devuelve el JSON."""
+
+        # Inyectar aprendizajes de predicciones pasadas
+        aprendizajes = get_aprendizajes()
+        if aprendizajes:
+            prompt += f"""
+
+APRENDIZAJES DE TUS PREDICCIONES PASADAS (úsalos para calibrar tu score y dirección):
+{aprendizajes}
+
+Si un tipo de señal acierta poco históricamente, baja el score o elige NEUTRAL. Si acierta mucho, súbelo."""
 
         r = requests.post(
             "https://api.anthropic.com/v1/messages",
@@ -674,6 +753,171 @@ Devuelve el JSON."""
     except Exception as e:
         print(f"AI Tecnico error {pair}: {e}")
     return None
+
+
+def guardar_prediccion(signal_id, pair, side, priceDiff, volInEUR, ai_scores):
+    """Guarda la predicción de la IA para poder evaluarla después contra el resultado real."""
+    from datetime import datetime
+    if signal_id is None or not ai_scores:
+        return
+    try:
+        n_ballenas, _, _ = contar_ballenas_unicas(pair)
+        with db_lock:
+            conn = sqlite3.connect(DB_PATH, timeout=10)
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("""
+                INSERT OR REPLACE INTO predicciones
+                (signal_id, pair, timestamp, side, price_diff, vol_usd, hora_utc,
+                 n_ballenas, score_fund, score_tec, score_final, direccion, evaluada)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,0)
+            """, (
+                signal_id, pair, datetime.utcnow().isoformat(), side,
+                priceDiff, volInEUR, datetime.utcnow().hour, n_ballenas,
+                ai_scores.get("score_fund"), ai_scores.get("score_tec"),
+                ai_scores.get("score_final"), ai_scores.get("direccion", "NEUTRAL")
+            ))
+            conn.commit()
+            conn.close()
+    except Exception as e:
+        print(f"Error guardar prediccion: {e}")
+
+
+def evaluar_predicciones():
+    """Evalúa predicciones con >24h de antigüedad: ¿acertó la dirección?
+    Compara la dirección predicha con la reversión real del precio.
+    Marca acierto=1 si el precio se movió como predijo la IA."""
+    from datetime import datetime, timedelta
+    try:
+        cutoff = (datetime.utcnow() - timedelta(hours=72)).isoformat()
+        conn = sqlite3.connect(DB_PATH, timeout=10)
+        conn.row_factory = sqlite3.Row
+        pendientes = conn.execute("""
+            SELECT * FROM predicciones WHERE evaluada=0 AND timestamp < ?
+        """, (cutoff,)).fetchall()
+
+        evaluadas = 0
+        OBJETIVO_PCT = 5.0  # objetivo de beneficio +5%
+        for p in pendientes:
+            sid = p["signal_id"]
+            direccion = p["direccion"]
+            # Obtener la curva de precio (pct_change = movimiento desde entrada, + = sube)
+            puntos = conn.execute("""
+                SELECT minutes, pct_change FROM price_tracking
+                WHERE signal_id=? ORDER BY minutes ASC
+            """, (sid,)).fetchall()
+            if not puntos:
+                continue
+            # Máximo movimiento a favor de la dirección predicha y máximo en contra
+            max_favor = 0    # cuánto se movió a favor de la tendencia
+            max_contra = 0   # cuánto en contra (para detectar si saltó el stop antes)
+            for pt in puntos:
+                pct = pt["pct_change"]
+                if direccion == "LONG":
+                    favor = pct       # LONG gana si el precio sube
+                elif direccion == "SHORT":
+                    favor = -pct      # SHORT gana si el precio baja
+                else:
+                    favor = 0
+                if favor > max_favor:
+                    max_favor = favor
+                if -favor > max_contra:
+                    max_contra = -favor
+
+            # Acierto: alcanzó el objetivo +5% a favor de la tendencia de las ballenas
+            acierto = 0
+            if direccion in ("LONG", "SHORT"):
+                acierto = 1 if max_favor >= OBJETIVO_PCT else 0
+            elif direccion == "NEUTRAL":
+                # NEUTRAL acierta si efectivamente no hubo tendencia clara (<5% en ninguna dirección)
+                acierto = 1 if max_favor < OBJETIVO_PCT else 0
+
+            conn.execute("""
+                UPDATE predicciones SET evaluada=1, acierto=?, reversion_real=?
+                WHERE signal_id=?
+            """, (acierto, round(max_favor, 2), sid))
+            evaluadas += 1
+
+        conn.commit()
+        conn.close()
+        if evaluadas:
+            print(f"📊 Evaluadas {evaluadas} predicciones")
+        return evaluadas
+    except Exception as e:
+        print(f"Error evaluar predicciones: {e}")
+        return 0
+
+
+def generar_aprendizajes():
+    """Analiza predicciones evaluadas y genera aprendizajes para inyectar en los prompts.
+    Devuelve un texto con patrones de acierto/fallo."""
+    try:
+        conn = sqlite3.connect(DB_PATH, timeout=10)
+        conn.row_factory = sqlite3.Row
+        total = conn.execute("SELECT COUNT(*) c FROM predicciones WHERE evaluada=1").fetchone()["c"]
+        if total < 10:
+            conn.close()
+            return None  # no hay datos suficientes
+
+        lineas = []
+        # Acierto global
+        glob = conn.execute("SELECT AVG(acierto)*100 a FROM predicciones WHERE evaluada=1").fetchone()["a"]
+        lineas.append(f"Acierto global: {glob:.0f}% sobre {total} predicciones")
+
+        # Por dirección
+        for d in ("LONG", "SHORT", "NEUTRAL"):
+            row = conn.execute("""
+                SELECT COUNT(*) c, AVG(acierto)*100 a FROM predicciones
+                WHERE evaluada=1 AND direccion=?
+            """, (d,)).fetchone()
+            if row["c"] and row["c"] >= 3:
+                lineas.append(f"Dirección {d}: {row['a']:.0f}% acierto ({row['c']} casos)")
+
+        # Por rango de score
+        for lo, hi, lbl in [(7,11,"score>=7"),(5,7,"score 5-7"),(0,5,"score<5")]:
+            row = conn.execute("""
+                SELECT COUNT(*) c, AVG(acierto)*100 a FROM predicciones
+                WHERE evaluada=1 AND score_final>=? AND score_final<?
+            """, (lo, hi)).fetchone()
+            if row["c"] and row["c"] >= 3:
+                lineas.append(f"Señales {lbl}: {row['a']:.0f}% acierto ({row['c']} casos)")
+
+        # Por horario
+        for cond, lbl in [("hora_utc BETWEEN 8 AND 20","horario EU/US"),
+                          ("(hora_utc < 8 OR hora_utc > 20)","horario asiático/nocturno")]:
+            row = conn.execute(f"""
+                SELECT COUNT(*) c, AVG(acierto)*100 a FROM predicciones
+                WHERE evaluada=1 AND {cond}
+            """).fetchone()
+            if row["c"] and row["c"] >= 3:
+                lineas.append(f"En {lbl}: {row['a']:.0f}% acierto ({row['c']} casos)")
+
+        # Por número de ballenas
+        row = conn.execute("""
+            SELECT COUNT(*) c, AVG(acierto)*100 a FROM predicciones
+            WHERE evaluada=1 AND n_ballenas >= 5
+        """).fetchone()
+        if row["c"] and row["c"] >= 3:
+            lineas.append(f"Con 5+ ballenas distintas: {row['a']:.0f}% acierto ({row['c']} casos)")
+
+        conn.close()
+        return "\n".join("- " + l for l in lineas)
+    except Exception as e:
+        print(f"Error generar aprendizajes: {e}")
+        return None
+
+
+# Cache de aprendizajes (se regenera cada 6h)
+_aprendizajes_cache = {"texto": None, "ts": 0}
+
+def get_aprendizajes():
+    import time as _time
+    now = _time.time()
+    if _aprendizajes_cache["texto"] is not None and now - _aprendizajes_cache["ts"] < 21600:
+        return _aprendizajes_cache["texto"]
+    txt = generar_aprendizajes()
+    _aprendizajes_cache["texto"] = txt
+    _aprendizajes_cache["ts"] = now
+    return txt
 
 
 def get_ai_scores(pair, priceDiff, volInEUR, side, ticker, change_7d):
@@ -810,32 +1054,36 @@ def get_ticker_24h(pair):
 
 
 def track_price(signal_id, pair, entry_price):
-    INTERVAL_MIN = 5
-    TOTAL_MIN    = 24 * 60
-    steps        = TOTAL_MIN // INTERVAL_MIN
+    """Sigue el precio 72h. Cada 5min las primeras 6h (entrada en dip),
+    luego cada 30min hasta 72h (desarrollo de la tendencia hacia +5%)."""
     print(f"📈 Tracking iniciado: {pair} (señal #{signal_id})")
-    for step in range(1, steps + 1):
-        time.sleep(INTERVAL_MIN * 60)
-        minutes = step * INTERVAL_MIN
-        price = get_current_price(pair)
-        if price is None:
-            continue
-        pct_change = round((price - entry_price) / entry_price * 100, 4)
-        try:
-            with db_lock:
-                conn = sqlite3.connect(DB_PATH, timeout=15)
-                conn.execute("PRAGMA journal_mode=WAL")
-                conn.execute("""
-                    INSERT INTO price_tracking
-                    (signal_id, pair, timestamp, minutes, price, pct_change)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                """, (signal_id, pair, datetime.now().isoformat(), minutes, price, pct_change))
-                conn.commit()
-                conn.close()
-        except Exception as e:
-            print(f"Error guardando tracking: {e}")
-        if minutes % 60 == 0:
-            print(f"📈 {pair} #{signal_id} t+{minutes}min: {price} ({pct_change:+.2f}%)")
+    minutes = 0
+    # Fase 1: primeras 6h cada 5 min (72 pasos)
+    # Fase 2: de 6h a 72h cada 30 min (132 pasos)
+    fases = [(5, 6*60), (30, 72*60)]
+    for interval, hasta_min in fases:
+        while minutes < hasta_min:
+            time.sleep(interval * 60)
+            minutes += interval
+            price = get_current_price(pair)
+            if price is None:
+                continue
+            pct_change = round((price - entry_price) / entry_price * 100, 4)
+            try:
+                with db_lock:
+                    conn = sqlite3.connect(DB_PATH, timeout=15)
+                    conn.execute("PRAGMA journal_mode=WAL")
+                    conn.execute("""
+                        INSERT INTO price_tracking
+                        (signal_id, pair, timestamp, minutes, price, pct_change)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    """, (signal_id, pair, datetime.now().isoformat(), minutes, price, pct_change))
+                    conn.commit()
+                    conn.close()
+            except Exception as e:
+                print(f"Error guardando tracking: {e}")
+            if minutes % 60 == 0:
+                print(f"📈 {pair} #{signal_id} t+{minutes}min: {price} ({pct_change:+.2f}%)")
     print(f"✅ Tracking completado: {pair} (señal #{signal_id})")
 
 def launch_tracker(signal_id, pair, entry_price):
@@ -960,6 +1208,7 @@ tr:hover td{background:var(--surface)}
   <div class="tab active" onclick="switchTab('analizar')">&#x1F50D; Analizar</div>
   <div class="tab" onclick="switchTab('par')">&#x1F4CA; Por par</div>
   <div class="tab" onclick="switchTab('signals')">&#x1F4CB; Señales</div>
+  <div class="tab" onclick="switchTab('resultados')">&#x1F3AF; Resultados IA</div>
   <div class="tab" onclick="switchTab('export')">&#x1F4E5; Exportar</div>
 </div>
 
@@ -1026,6 +1275,12 @@ tr:hover td{background:var(--surface)}
   </div>
 </div>
 
+<div class="tab-content" id="tab-resultados">
+  <div class="sec-title">&#x1F3AF; Resultados de la IA — Aprendizaje</div>
+  <div class="sec-sub">Acierto real de las predicciones evaluadas (señales con +24h). La IA usa estos datos para mejorar sus decisiones.</div>
+  <div id="resultados-content" style="padding:1rem 1.5rem"><div class="no-data">Cargando...</div></div>
+</div>
+
 <div class="tab-content" id="tab-export">
   <div class="sec-title">&#x1F4E5; Exportar</div>
   <div class="export-grid">
@@ -1078,12 +1333,13 @@ function krakenUrl(pair) {
 }
 
 function switchTab(tab) {
-  var tabs = ['analizar', 'par', 'signals', 'export'];
+  var tabs = ['analizar', 'par', 'signals', 'resultados', 'export'];
   var tabEls = document.querySelectorAll('.tab');
   tabEls.forEach(function(t, i) { t.classList.toggle('active', tabs[i] === tab); });
   document.querySelectorAll('.tab-content').forEach(function(c) { c.classList.remove('active'); });
   document.getElementById('tab-' + tab).classList.add('active');
   if (tab === 'signals') loadSignals();
+  if (tab === 'resultados') loadResultados();
 }
 
 function goToPar(pair) {
@@ -1300,6 +1556,49 @@ async function loadPar() {
   });
   h += '</tbody></table></div>';
   el.innerHTML = h;
+}
+
+async function loadResultados() {
+  var el = document.getElementById('resultados-content');
+  try {
+    var data = await (await fetch('/api/resultados')).json();
+    if (!data || data.total === 0) {
+      el.innerHTML = '<div class="no-data">Aún no hay predicciones evaluadas.<br>Las señales se evalúan 24h después de generarse.' +
+        (data && data.pendientes ? '<br><br>' + data.pendientes + ' predicciones pendientes de evaluar.' : '') + '</div>';
+      return;
+    }
+    function barColor(a) { return a >= 60 ? 'var(--green)' : a >= 45 ? 'var(--orange)' : 'var(--red)'; }
+    function bloque(titulo, items, keyName) {
+      var h = '<div style="margin-bottom:1.5rem"><div style="font-size:0.7rem;color:var(--muted);margin-bottom:0.6rem;text-transform:uppercase;letter-spacing:0.07em">' + titulo + '</div>';
+      items.forEach(function(it) {
+        var label = it[keyName];
+        var a = it.acierto;
+        h += '<div style="display:grid;grid-template-columns:130px 1fr 90px;gap:0.6rem;align-items:center;margin-bottom:0.4rem;font-size:0.72rem">';
+        h += '<span>' + label + '</span>';
+        h += '<div style="background:#0f1a28;border-radius:4px;height:8px;overflow:hidden"><div style="height:100%;width:' + a + '%;background:' + barColor(a) + '"></div></div>';
+        h += '<span style="color:' + barColor(a) + ';font-weight:700">' + a + '% (' + it.casos + ')</span>';
+        h += '</div>';
+      });
+      h += '</div>';
+      return h;
+    }
+    var html = '';
+    // Acierto global grande
+    var gc = barColor(data.acierto_global);
+    html += '<div style="text-align:center;margin-bottom:1.5rem;padding:1.2rem;background:var(--surface);border:1px solid var(--border);border-radius:10px">';
+    html += '<div style="font-size:0.65rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em">Acierto Global</div>';
+    html += '<div style="font-family:\'Syne\',sans-serif;font-size:3rem;font-weight:800;color:' + gc + ';line-height:1.1">' + data.acierto_global + '%</div>';
+    html += '<div style="font-size:0.65rem;color:var(--muted)">' + data.total + ' predicciones evaluadas · ' + data.pendientes + ' pendientes</div>';
+    html += '</div>';
+    if (data.por_direccion && data.por_direccion.length) html += bloque('Por dirección', data.por_direccion, 'direccion');
+    if (data.por_score && data.por_score.length) html += bloque('Por nivel de score', data.por_score, 'rango');
+    if (data.por_horario && data.por_horario.length) html += bloque('Por horario', data.por_horario, 'horario');
+    if (data.mejores_pares && data.mejores_pares.length) html += bloque('Mejores pares', data.mejores_pares, 'pair');
+    el.innerHTML = html;
+  } catch(e) {
+    el.innerHTML = '<div class="no-data">Error cargando resultados</div>';
+    console.log('resultados err', e);
+  }
 }
 
 async function loadSignals() {
@@ -1602,6 +1901,59 @@ def api_ticker24h():
     data = get_ticker_24h(pair)
     if not data: return jsonify({'error': 'no data'})
     return jsonify(data)
+
+@app.route('/api/resultados')
+def api_resultados():
+    """Devuelve estadísticas de acierto de las predicciones evaluadas."""
+    try:
+        conn = sqlite3.connect(DB_PATH, timeout=10)
+        conn.row_factory = sqlite3.Row
+        total = conn.execute("SELECT COUNT(*) c FROM predicciones WHERE evaluada=1").fetchone()["c"]
+        pendientes = conn.execute("SELECT COUNT(*) c FROM predicciones WHERE evaluada=0").fetchone()["c"]
+        if total == 0:
+            conn.close()
+            return jsonify({"total": 0, "pendientes": pendientes})
+
+        glob = conn.execute("SELECT AVG(acierto)*100 a FROM predicciones WHERE evaluada=1").fetchone()["a"]
+
+        por_direccion = []
+        for d in ("LONG","SHORT","NEUTRAL"):
+            row = conn.execute("SELECT COUNT(*) c, AVG(acierto)*100 a FROM predicciones WHERE evaluada=1 AND direccion=?", (d,)).fetchone()
+            if row["c"]:
+                por_direccion.append({"direccion": d, "casos": row["c"], "acierto": round(row["a"] or 0)})
+
+        por_score = []
+        for lo, hi, lbl in [(7,11,"Score 7+"),(5,7,"Score 5-7"),(0,5,"Score <5")]:
+            row = conn.execute("SELECT COUNT(*) c, AVG(acierto)*100 a FROM predicciones WHERE evaluada=1 AND score_final>=? AND score_final<?", (lo,hi)).fetchone()
+            if row["c"]:
+                por_score.append({"rango": lbl, "casos": row["c"], "acierto": round(row["a"] or 0)})
+
+        por_horario = []
+        for cond, lbl in [("hora_utc BETWEEN 8 AND 20","EU/US (8-20h)"),("(hora_utc<8 OR hora_utc>20)","Asia/nocturno")]:
+            row = conn.execute(f"SELECT COUNT(*) c, AVG(acierto)*100 a FROM predicciones WHERE evaluada=1 AND {cond}").fetchone()
+            if row["c"]:
+                por_horario.append({"horario": lbl, "casos": row["c"], "acierto": round(row["a"] or 0)})
+
+        # Mejores y peores pares
+        mejores = conn.execute("""
+            SELECT pair, COUNT(*) c, AVG(acierto)*100 a FROM predicciones
+            WHERE evaluada=1 GROUP BY pair HAVING c>=2 ORDER BY a DESC LIMIT 5
+        """).fetchall()
+
+        conn.close()
+        return jsonify({
+            "total": total,
+            "pendientes": pendientes,
+            "acierto_global": round(glob or 0),
+            "por_direccion": por_direccion,
+            "por_score": por_score,
+            "por_horario": por_horario,
+            "mejores_pares": [{"pair": m["pair"], "casos": m["c"], "acierto": round(m["a"] or 0)} for m in mejores]
+        })
+    except Exception as e:
+        print(f"Error api_resultados: {e}")
+        return jsonify({"total": 0, "error": str(e)})
+
 
 @app.route('/api/export/<export_type>')
 def api_export(export_type):
@@ -2032,13 +2384,15 @@ def tradeLoop(pairsList, wsnames, pairs, eurPrices, label):
                         # 2. Calcular score IA en background y enviar como reply
                         def send_ai_score_reply(pair=pair, priceDiff=priceDiff, volInEUR=volInEUR,
                                                 side=tradeDF["side"].iloc[0], ticker=ticker,
-                                                c7d=c7d, msg_id=msg_id):
+                                                c7d=c7d, msg_id=msg_id, signal_id=signal_id):
                             if not ANTHROPIC_KEY:
                                 return
                             try:
                                 scores = get_ai_scores(pair, priceDiff, volInEUR, side, ticker, c7d)
                                 if not scores:
                                     return
+                                # Guardar predicción para evaluarla después
+                                guardar_prediccion(signal_id, pair, side, priceDiff, volInEUR, scores)
                                 score_final = scores["score_final"]
                                 if score_final >= 8:
                                     quality = "🟢"
@@ -2135,6 +2489,17 @@ def connectTradeWS():
     t_dash = threading.Thread(target=run_dashboard, daemon=True)
     t_dash.start()
     print("🌐 Dashboard arrancado en puerto 5000")
+
+    # Hilo de evaluación de predicciones (cada hora)
+    def loop_evaluacion():
+        while True:
+            time.sleep(3600)  # cada hora
+            try:
+                evaluar_predicciones()
+            except Exception as e:
+                print(f"Error en loop evaluacion: {e}")
+    threading.Thread(target=loop_evaluacion, daemon=True).start()
+    print("📊 Hilo de evaluación de predicciones arrancado")
 
     print("Getting pairs...")
     pairs = getPairs()
