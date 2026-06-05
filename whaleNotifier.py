@@ -311,6 +311,7 @@ CÓMO PUNTUAR LA FUERZA DE LA TENDENCIA (factores en orden de importancia):
 6. HORA: 08-20 UTC más liquidez, continuación más limpia.
 
 IMPORTANTE: muchas ballenas en la misma dirección NO es agotamiento, es CONFIRMACIÓN de tendencia. Cuantas más, mayor el score a favor.
+IMPORTANTE 2: varias SEÑALES seguidas de la misma ballena (señales repetidas aunque sea 1 ballena) indican INSISTENCIA y fuerza, no debilidad. Solo trata como "insuficiente" cuando hay 1 ÚNICA señal aislada de 1 ballena con volumen bajo.
 
 SCORE (1-10): mide tu CONFIANZA en que la tendencia de las ballenas continuará hasta el objetivo +5%.
 - 8-10: tendencia muy clara (importes grandes + 5+ ballenas mismo lado + consistente + sostenida)
@@ -500,12 +501,14 @@ Devuelve el JSON con score y resumen."""
     return None
 
 
+VENTANA_BALLENAS_DIAS = 15  # ventana para contar ballenas/señales acumuladas
+
 def contar_ballenas_unicas(pair, gap_min=5):
-    """Cuenta ballenas únicas en 7d: señales separadas >gap_min minutos = ballenas distintas.
+    """Cuenta ballenas únicas en la ventana: señales separadas >gap_min minutos = ballenas distintas.
     Devuelve (num_ballenas_unicas, num_total_señales, intensidad_creciente)."""
     from datetime import datetime, timedelta
     try:
-        since = (datetime.utcnow() - timedelta(days=7)).isoformat()
+        since = (datetime.utcnow() - timedelta(days=VENTANA_BALLENAS_DIAS)).isoformat()
         conn = sqlite3.connect(DB_PATH, timeout=5)
         rows = conn.execute(
             "SELECT timestamp, price_diff_pct FROM signals WHERE pair=? AND timestamp>=? ORDER BY timestamp ASC",
@@ -541,7 +544,7 @@ def contar_ballenas_por_lado(pair, gap_min=5):
     Devuelve (n_compra, n_venta, vol_compra, vol_venta)."""
     from datetime import datetime, timedelta
     try:
-        since = (datetime.utcnow() - timedelta(days=7)).isoformat()
+        since = (datetime.utcnow() - timedelta(days=VENTANA_BALLENAS_DIAS)).isoformat()
         conn = sqlite3.connect(DB_PATH, timeout=5)
         rows = conn.execute(
             "SELECT timestamp, side, volume_eur FROM signals WHERE pair=? AND timestamp>=? ORDER BY timestamp ASC",
@@ -703,11 +706,16 @@ SEÑAL ACTUAL:
 - Volumen de esta operación: {volInEUR:,.0f} USD
 - Hora UTC: {hora_utc}h ({horario})
 
-ACUMULACIÓN DE BALLENAS (últimos 7 días, separadas >5min = ballenas distintas):
+ACUMULACIÓN DE BALLENAS (últimos 15 días, separadas >5min = ballenas distintas):
 - Ballenas COMPRANDO: {n_compra} (volumen acumulado {vol_compra:,.0f} USD)
 - Ballenas VENDIENDO: {n_venta} (volumen acumulado {vol_venta:,.0f} USD)
-- Total señales: {n_total}
+- Total de SEÑALES (ejecuciones): {n_total}
 - Histórico del par: {rev_txt}
+
+NOTA SOBRE SEÑALES vs BALLENAS:
+- {n_total} señales con {n_compra + n_venta} ballenas distintas.
+- Si una MISMA ballena ejecuta varias señales seguidas (varias señales pero pocas ballenas), eso indica INSISTENCIA/FUERZA de esa ballena, no debilidad. NO lo trates como "señal única insuficiente".
+- 1 sola señal de 1 sola ballena = poca confirmación. Varias señales (aunque sean de la misma ballena) = mayor presión real.
 
 ANÁLISIS DE TENDENCIA:
 - Lado dominante: {"COMPRA (tendencia alcista)" if n_compra > n_venta else "VENTA (tendencia bajista)" if n_venta > n_compra else "MIXTO (sin tendencia clara)"}
@@ -935,10 +943,10 @@ def get_aprendizajes():
 def get_ai_scores(pair, priceDiff, volInEUR, side, ticker, change_7d):
     """Obtiene ambos scores y calcula la media. Corre en threads paralelos."""
     import concurrent.futures
-    # Contar señales del par en últimos 7 días
+    # Contar señales del par en la ventana de ballenas
     try:
         from datetime import datetime, timedelta
-        since_7d = (datetime.utcnow() - timedelta(days=7)).isoformat()
+        since_7d = (datetime.utcnow() - timedelta(days=VENTANA_BALLENAS_DIAS)).isoformat()
         conn = sqlite3.connect(DB_PATH, timeout=5)
         count_7d = conn.execute(
             "SELECT COUNT(*) FROM signals WHERE pair=? AND timestamp>=?",
