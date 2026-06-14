@@ -1237,11 +1237,8 @@ tr:hover td{background:var(--surface)}
   <div class="sec-sub">Pares con multiples señales en el periodo y al menos 50.000 USD de volumen en 24h.</div>
   <div class="controls">
     <select id="analizar-window" onchange="loadAnalizar()">
-      <option value="30">Ultimos 30 min</option>
-      <option value="60">Ultima hora</option>
-      <option value="240">Ultimas 4h</option>
-      <option value="480">Ultimas 8h</option>
-      <option value="1440" selected>Ultimas 24h</option>
+      <option value="1440" selected>1 dia (24h)</option>
+      <option value="10080">7 dias</option>
     </select>
     <select id="analizar-min" onchange="loadAnalizar()">
       <option value="2" selected>Min 2 señales</option>
@@ -1543,7 +1540,11 @@ async function loadPar() {
   var r1c = (data.rev_1h_media || 0) > 50 ? 'pos' : 'neg';
   var r4c = (data.rev_4h_media || 0) > 50 ? 'pos' : 'neg';
   var r24c = (data.rev_24h_media || 0) > 50 ? 'pos' : 'neg';
-  var h = '<div class="par-metrics">';
+  var h = '';
+  if (data.cmc_url) {
+    h += '<div style="margin-bottom:0.9rem"><a href="' + data.cmc_url + '" target="_blank" class="kraken-btn" style="display:inline-flex">&#x1F4CA; ' + (data.pair || pair) + ' en CoinGecko</a></div>';
+  }
+  h += '<div class="par-metrics">';
   h += '<div class="cand-metric"><div class="cand-metric-label">Total señales</div><div class="cand-metric-value" style="color:var(--accent)">' + data.total + '</div></div>';
   h += '<div class="cand-metric"><div class="cand-metric-label">Rev 1h</div><div class="cand-metric-value ' + r1c + '">' + (data.rev_1h_media !== null ? data.rev_1h_media + '%' : '-') + '</div></div>';
   h += '<div class="cand-metric"><div class="cand-metric-label">Rev 4h</div><div class="cand-metric-value ' + r4c + '">' + (data.rev_4h_media !== null ? data.rev_4h_media + '%' : '-') + '</div></div>';
@@ -1861,7 +1862,14 @@ def api_par():
         if r24 is not None: revs_24h.append(abs(r24))
         enriched.append({**s,'price_extremo':s['price_to'],'rev_1h':r1,'rev_4h':r4,'rev_24h':r24})
     avg = lambda lst: round(sum(lst)/len(lst),1) if lst else None
-    return jsonify({'total':len(signals),'rev_1h_media':avg(revs_1h),'rev_4h_media':avg(revs_4h),'rev_24h_media':avg(revs_24h),'vol_min':round(min(vols),0),'vol_avg':round(sum(vols)/len(vols),0),'avg_diff':round(sum(diffs)/len(diffs),2),'signals':enriched[:50]})
+    # URL de CoinGecko del par (usa el token real de la primera señal)
+    real_pair = signals[0]['pair']
+    token = real_pair.split('/')[0] if '/' in real_pair else real_pair
+    try:
+        cmc_url = get_cmc_url(token)
+    except Exception:
+        cmc_url = f"https://www.coingecko.com/en/coins/{token.lower()}"
+    return jsonify({'total':len(signals),'pair':real_pair,'cmc_url':cmc_url,'rev_1h_media':avg(revs_1h),'rev_4h_media':avg(revs_4h),'rev_24h_media':avg(revs_24h),'vol_min':round(min(vols),0),'vol_avg':round(sum(vols)/len(vols),0),'avg_diff':round(sum(diffs)/len(diffs),2),'signals':enriched[:50]})
 
 @app.route('/api/top_scores')
 def api_top_scores():
