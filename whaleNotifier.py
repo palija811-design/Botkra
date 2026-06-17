@@ -1238,6 +1238,8 @@ tr:hover td{background:var(--surface)}
   <div class="controls">
     <select id="analizar-window" onchange="loadAnalizar()">
       <option value="1440" selected>1 dia (24h)</option>
+      <option value="2880">2 dias</option>
+      <option value="4320">3 dias</option>
       <option value="10080">7 dias</option>
     </select>
     <select id="analizar-min" onchange="loadAnalizar()">
