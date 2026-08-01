@@ -2400,9 +2400,17 @@ def tradeLoop(pairsList, wsnames, pairs, eurPrices, label):
                 else:
                     # Para cualquier otra moneda base: intentar convertir via EUR/USD
                     volInEUR = vol_base * eur_usd
-                if(priceDiff > 2 and volInEUR > 15000):  # volInEUR es realmente vol en USD equivalente
+                # Umbral diferenciado: stablecoins y divisas se desvían poco, umbral más bajo
+                _token_base = pair.split("/")[0] if "/" in pair else pair
+                STABLES_FIAT = {"DAI","USDC","USDT","TUSD","BUSD","USDP","PYUSD","GUSD",
+                                "EUR","GBP","USD","CHF","JPY","AUD","CAD","EURT","EURR"}
+                if _token_base.upper() in STABLES_FIAT:
+                    umbral_pct = 0.5   # stablecoins/divisas: desvío pequeño ya es oportunidad de reversión
+                else:
+                    umbral_pct = 2.0   # cryptos normales: umbral estándar
+                if(priceDiff > umbral_pct and volInEUR > 15000):  # volInEUR es realmente vol en USD equivalente
                     priceDiff = round(priceDiff, 3)
-                    print(f"\U0001F433 [{label}]", priceDiff, pair)
+                    print(f"\U0001F433 [{label}]", priceDiff, pair, f"(umbral {umbral_pct}%)")
                     entry_price = float(tradeDF["price"].iloc[-1])
                     # Guardar siempre en BD para análisis
                     signal_id = save_signal(tradeDF, pair, volInEUR, priceDiff)
