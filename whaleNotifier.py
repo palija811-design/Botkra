@@ -2084,6 +2084,17 @@ def filterPairs(wsnames, currency):
         filtered.update(extras)
     return(filtered)
 
+def filterFiatPairs(wsnames):
+    """Pares de stablecoin/cripto contra divisas fiat exóticas (CHF, CAD, JPY, AUD).
+    Ej: USDT/CHF, USDC/CAD, USDT/JPY. Para capturar desvíos de paridad."""
+    fiat_quotes = ["CHF", "CAD", "JPY", "AUD"]
+    filtered = {}
+    for k, v in wsnames.items():
+        base = v.split("/")[-1] if "/" in v else ""
+        if base in fiat_quotes:
+            filtered[k] = v
+    return(filtered)
+
 def volumeInEUR(wsnames, pair, volume, eurPrices):
     """
     Calcula el volumen de la operación en USD.
@@ -2400,15 +2411,21 @@ def tradeLoop(pairsList, wsnames, pairs, eurPrices, label):
                 else:
                     # Para cualquier otra moneda base: intentar convertir via EUR/USD
                     volInEUR = vol_base * eur_usd
-                # Umbral diferenciado: stablecoins y divisas se desvían poco, umbral más bajo
+                # Umbral diferenciado según tipo de par
                 _token_base = pair.split("/")[0] if "/" in pair else pair
                 STABLES_FIAT = {"DAI","USDC","USDT","TUSD","BUSD","USDP","PYUSD","GUSD",
                                 "EUR","GBP","USD","CHF","JPY","AUD","CAD","EURT","EURR"}
-                if _token_base.upper() in STABLES_FIAT:
-                    umbral_pct = 0.5   # stablecoins/divisas: desvío pequeño ya es oportunidad de reversión
+                if label == "FIAT":
+                    # Pares cripto/stable contra divisa fiat: desvío mínimo, umbral muy bajo
+                    umbral_pct = 0.25
+                    vol_min_op = 15000   # volumen de la operación
+                elif _token_base.upper() in STABLES_FIAT:
+                    umbral_pct = 0.5     # stablecoins: desvío pequeño ya es oportunidad
+                    vol_min_op = 15000
                 else:
-                    umbral_pct = 2.0   # cryptos normales: umbral estándar
-                if(priceDiff > umbral_pct and volInEUR > 15000):  # volInEUR es realmente vol en USD equivalente
+                    umbral_pct = 2.0     # cryptos normales: umbral estándar
+                    vol_min_op = 15000
+                if(priceDiff > umbral_pct and volInEUR > vol_min_op):  # volInEUR es realmente vol en USD equivalente
                     priceDiff = round(priceDiff, 3)
                     print(f"\U0001F433 [{label}]", priceDiff, pair, f"(umbral {umbral_pct}%)")
                     entry_price = float(tradeDF["price"].iloc[-1])
@@ -2561,10 +2578,12 @@ def connectTradeWS():
     eurWsnames = filterPairs(wsnames, "EUR")
     usdWsnames = filterPairs(wsnames, "USD")
     usdOnlyWsnames = {k: v for k, v in usdWsnames.items() if k not in eurWsnames}
+    fiatWsnames = filterFiatPairs(wsnames)
     eurList = list(eurWsnames.values())
     usdList = list(usdOnlyWsnames.values())
-    print(f"EUR pairs: {len(eurList)} | USD-only pairs: {len(usdList)}")
-    telegram_bot_sendtext(f"\U0001F40D Levantado — EUR: {len(eurList)} | USD: {len(usdList)} pares")
+    fiatList = list(fiatWsnames.values())
+    print(f"EUR pairs: {len(eurList)} | USD-only pairs: {len(usdList)} | FIAT pairs: {len(fiatList)}")
+    telegram_bot_sendtext(f"\U0001F40D Levantado — EUR: {len(eurList)} | USD: {len(usdList)} | FIAT: {len(fiatList)} pares")
 
     t_eur = threading.Thread(target=tradeLoop, args=(eurList, wsnames, pairs, eurPrices, "EUR"), daemon=True)
     t_eur.start()
@@ -2573,6 +2592,12 @@ def connectTradeWS():
     t_usd = threading.Thread(target=tradeLoop, args=(usdList, wsnames, pairs, eurPrices, "USD"), daemon=True)
     t_usd.start()
     print("Hilo USD arrancado")
+    time.sleep(30)
+    t_fiat = None
+    if fiatList:
+        t_fiat = threading.Thread(target=tradeLoop, args=(fiatList, wsnames, pairs, eurPrices, "FIAT"), daemon=True)
+        t_fiat.start()
+        print(f"Hilo FIAT arrancado ({len(fiatList)} pares)")
 
     while True:
         time.sleep(60)
@@ -2584,5 +2609,9 @@ def connectTradeWS():
             print("⚠️ Hilo USD muerto — reiniciando...")
             t_usd = threading.Thread(target=tradeLoop, args=(usdList, wsnames, pairs, eurPrices, "USD"), daemon=True)
             t_usd.start()
+        if fiatList and t_fiat is not None and not t_fiat.is_alive():
+            print("⚠️ Hilo FIAT muerto — reiniciando...")
+            t_fiat = threading.Thread(target=tradeLoop, args=(fiatList, wsnames, pairs, eurPrices, "FIAT"), daemon=True)
+            t_fiat.start()
 
 connectTradeWS()
