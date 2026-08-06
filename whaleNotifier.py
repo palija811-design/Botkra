@@ -1254,6 +1254,11 @@ tr:hover td{background:var(--surface)}
       <option value="7">Score 7+</option>
       <option value="8">Score 8+</option>
     </select>
+    <select id="analizar-tipo" onchange="loadAnalizar()">
+      <option value="todo">Cripto + Forex</option>
+      <option value="cripto">Solo cripto</option>
+      <option value="forex">Solo forex</option>
+    </select>
     <button onclick="loadAnalizar()">Filtrar</button>
     <span id="analizar-count" style="color:var(--muted);font-size:0.7rem"></span>
   </div>
@@ -1277,6 +1282,11 @@ tr:hover td{background:var(--surface)}
       <option value="">Todos</option>
       <option value="b">&#x1F34F; Buy</option>
       <option value="s">&#x1F34E; Sell</option>
+    </select>
+    <select id="filterTipo" onchange="loadSignals()">
+      <option value="todo">Cripto + Forex</option>
+      <option value="cripto">Solo cripto</option>
+      <option value="forex">Solo forex</option>
     </select>
     <select id="filterLimit" onchange="loadSignals()">
       <option value="100">100</option>
@@ -1342,6 +1352,30 @@ function timeAgo(ts) {
   if (diff < 60) return diff + 's';
   if (diff < 3600) return Math.floor(diff/60) + 'min';
   return Math.floor(diff/3600) + 'h ' + Math.floor((diff%3600)/60) + 'min';
+}
+
+function fechaHora(ts) {
+  // Muestra dia + hora de forma clara: "hoy 12:59", "ayer 14:30", "05/08 14:30 (3d)"
+  var d = new Date(ts.replace(' ', 'T'));
+  var hora = ('0'+d.getHours()).slice(-2) + ':' + ('0'+d.getMinutes()).slice(-2);
+  var ahora = new Date();
+  var dHoy = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate());
+  var dSig = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  var diasDif = Math.round((dHoy - dSig) / 86400000);
+  if (diasDif === 0) return 'hoy ' + hora;
+  if (diasDif === 1) return 'ayer ' + hora;
+  var fecha = ('0'+d.getDate()).slice(-2) + '/' + ('0'+(d.getMonth()+1)).slice(-2);
+  return fecha + ' ' + hora + ' (' + diasDif + 'd)';
+}
+
+// Clasifica un par: forex = ambas partes son divisas fiat. Stablecoins cuentan como cripto.
+var FIAT_CURRENCIES = ['USD','EUR','GBP','JPY','CHF','CAD','AUD','NZD','SEK','NOK','DKK','PLN','MXN','SGD','HKD','ZAR','TRY','CNH','CZK','HUF'];
+function esForex(pair) {
+  var parts = pair.split('/');
+  if (parts.length !== 2) return false;
+  var a = parts[0].toUpperCase();
+  var b = parts[1].toUpperCase();
+  return FIAT_CURRENCIES.indexOf(a) !== -1 && FIAT_CURRENCIES.indexOf(b) !== -1;
 }
 
 function krakenUrl(pair) {
@@ -1430,11 +1464,15 @@ async function loadAnalizar() {
   var pairs = groups.map(function(g) { return g.pair; }).join(',');
   var tickers = {};
   try { tickers = await (await fetch('/api/ticker_batch?pairs=' + encodeURIComponent(pairs))).json(); } catch(e) {}
+  var tipo = document.getElementById('analizar-tipo').value;
   var filtered = groups.filter(function(g) {
     var t = tickers[g.pair];
     var volOk = !t || t.vol_24h_base >= 50000;
     var scoreOk = minScore === 0 || (g.ai_score !== null && g.ai_score !== undefined && g.ai_score >= minScore);
-    return volOk && scoreOk;
+    var tipoOk = true;
+    if (tipo === 'forex') tipoOk = esForex(g.pair);
+    else if (tipo === 'cripto') tipoOk = !esForex(g.pair);
+    return volOk && scoreOk && tipoOk;
   });
   if (filtered.length === 0) {
     el.innerHTML = '<div class="no-data">No hay pares con 50K$+ vol 24h en este periodo.</div>';
@@ -1451,7 +1489,6 @@ async function loadAnalizar() {
     var sideClass = g.dominant_side === 'b' ? 'badge-side-b' : 'badge-side-s';
     var sideText = g.dominant_side === 'b' ? 'COMPRA' : 'VENTA';
     var ch24c = t.change_24h > 0 ? 'pos' : t.change_24h < 0 ? 'neg' : 'muted';
-    var ch7dc = g.change_7d > 0 ? 'pos' : g.change_7d < 0 ? 'neg' : 'muted';
     var kUrl = krakenUrl(g.pair);
     var sc = g.ai_score;
     var scColor = sc >= 7 ? 'var(--green)' : sc >= 5 ? 'var(--orange)' : 'var(--red)';
@@ -1476,7 +1513,7 @@ async function loadAnalizar() {
       signalRows += '<span class="' + sideClass2 + '">' + sideEmoji + '</span>';
       signalRows += '<span class="neu">' + s.price_diff_pct + '%</span>';
       signalRows += '<span class="vol">' + fmt(s.volume_eur) + '$</span>';
-      signalRows += '<span class="muted" style="font-size:0.6rem">' + s.timestamp.replace('T', ' ').substring(11, 19) + '</span>';
+      signalRows += '<span class="muted" style="font-size:0.6rem">' + fechaHora(s.timestamp) + '</span>';
       signalRows += '<button class="btn-sm" style="margin-left:auto" data-id="' + s.id + '" data-pair="' + g.pair.replace(/"/g, '') + '" data-side="' + s.side + '" data-price="' + s.price_to + '" onclick="openChart(+this.dataset.id, this.dataset.pair, this.dataset.side, +this.dataset.price)">&#x1F4C8;</button>';
       signalRows += '</div>';
     });
@@ -1517,9 +1554,7 @@ async function loadAnalizar() {
     html += '<div class="card-metrics">';
     html += '<div class="card-metric"><div class="card-metric-label">Diff media</div><div class="card-metric-value neu">' + g.avg_diff + '%</div></div>';
     html += '<div class="card-metric"><div class="card-metric-label">Cambio 24h</div><div class="card-metric-value ' + ch24c + '">' + (t.change_24h !== undefined ? (t.change_24h > 0 ? '+' : '') + t.change_24h + '%' : '-') + '</div></div>';
-    html += '<div class="card-metric"><div class="card-metric-label">Cambio 7d</div><div class="card-metric-value ' + ch7dc + '">' + (g.change_7d !== null && g.change_7d !== undefined ? (g.change_7d > 0 ? '+' : '') + g.change_7d + '%' : '-') + '</div></div>';
     html += '<div class="card-metric"><div class="card-metric-label">Vol 24h</div><div class="card-metric-value vol">' + (t.vol_24h_base !== undefined ? fmt(t.vol_24h_base) + '$' : '-') + '</div></div>';
-    html += '<div class="card-metric"><div class="card-metric-label">Vol 7d</div><div class="card-metric-value vol">' + (t.vol_7d_usd ? fmt(t.vol_7d_usd) + '$' : '-') + '</div></div>';
     html += '</div>';
     html += '<div class="card-signals">' + signalRows + '</div>';
     html += aiDetail;
@@ -1629,6 +1664,9 @@ async function loadSignals() {
   var side = document.getElementById('filterSide').value;
   var limit = document.getElementById('filterLimit').value;
   var data = await (await fetch('/api/signals?pair=' + pair + '&side=' + side + '&limit=' + limit)).json();
+  var tipo = document.getElementById('filterTipo').value;
+  if (tipo === 'forex') data = data.filter(function(s){ return esForex(s.pair); });
+  else if (tipo === 'cripto') data = data.filter(function(s){ return !esForex(s.pair); });
   document.getElementById('count').textContent = data.length + ' señales';
   var h = '';
   data.forEach(function(s) {
@@ -2278,16 +2316,8 @@ def createTGmessage(tradeDF, pair, volInEUR, priceDiff, wsnames, pairs, ticker=N
     cmc_url = get_cmc_url(token_clean)
     if ticker:
         change_emoji_24 = '📈' if ticker['change_24h'] > 0 else '📉'
-        base_token = pair.split('/')[1] if '/' in pair else ''
         vol24_annotated = anotateVolume(round(max(ticker['vol_24h_base'], 1), 0))
-        if change_7d is not None:
-            emoji_7d = '📈' if change_7d > 0 else '📉'
-            line_7d = f" | {emoji_7d} 7d: *{change_7d:+.2f}%*"
-        else:
-            line_7d = ""
-        vol7d = ticker.get('vol_7d_usd')
-        vol7d_str = f" | Vol 7d: {anotateVolume(vol7d)}$" if vol7d else ""
-        quintaLinea = f"\n{change_emoji_24} 24h: *{ticker['change_24h']:+.2f}%* | Vol: {vol24_annotated}${line_7d}{vol7d_str}"
+        quintaLinea = f"\n{change_emoji_24} 24h: *{ticker['change_24h']:+.2f}%* | Vol: {vol24_annotated}$"
         sextaLinea = f"\n[📊 CoinGecko]({cmc_url})"
     else:
         quintaLinea = ""
