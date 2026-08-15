@@ -35,6 +35,11 @@ else:
     print("Production")
 
 ANTHROPIC_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+# httpSMS — alertas SMS para mega-ballenas
+HTTPSMS_API_KEY = os.getenv("HTTPSMS_API_KEY", "uk_5fp9LuMMkaBFiWXY6tJWHVRKKLzFFwOLj-fE92SER0mSPx67F6vgc3Dlh1DKcVHy")
+HTTPSMS_FROM    = os.getenv("HTTPSMS_FROM", "+34667288899")
+HTTPSMS_TO      = os.getenv("HTTPSMS_TO", "+34693800942")
+MEGA_BALLENA_USD = 100000   # umbral compra gigante para alerta extra + SMS
 # Base de datos
 DB_PATH = os.getenv("DB_PATH", "/data/signals.db")
 
@@ -2370,6 +2375,56 @@ def twilio_llamada(pair, priceDiff, volInEUR):
     except Exception as e:
         print(f"⚠️ Error Twilio: {e}")
 
+
+def enviar_sms(texto):
+    """Envía un SMS vía httpSMS (usa tu móvil Android como pasarela)."""
+    if not (HTTPSMS_API_KEY and HTTPSMS_FROM and HTTPSMS_TO):
+        print("⚠️ httpSMS no configurado (faltan variables)")
+        return
+    try:
+        r = requests.post(
+            "https://api.httpsms.com/v1/messages/send",
+            headers={"x-api-key": HTTPSMS_API_KEY, "Content-Type": "application/json"},
+            json={"from": HTTPSMS_FROM, "to": HTTPSMS_TO, "content": texto[:300]},
+            timeout=10
+        )
+        print(f"📱 SMS enviado: {r.status_code}")
+    except Exception as e:
+        print(f"⚠️ Error httpSMS: {e}")
+
+
+def alerta_mega_ballena(pair, side, usd, precio, ticker):
+    """Notificación destacada (Telegram + SMS) para compras gigantes >= MEGA_BALLENA_USD."""
+    lado = "COMPRA" if side == "b" else "VENTA"
+    chg24 = ticker.get("change_24h") if ticker else None
+    chg_str = f"{chg24:+.2f}%" if chg24 is not None else "?"
+    vol24 = ticker.get("vol_24h_base") if ticker else None
+    vol_str = anotateVolume(vol24) + "$" if vol24 else "?"
+
+    # Mensaje Telegram MUY destacado (distinto de las señales normales)
+    tg = (
+        f"🚨🐋🚨 *MEGA BALLENA* 🚨🐋🚨\n"
+        f"━━━━━━━━━━━━━━━\n"
+        f"*{lado} GIGANTE en {pair}*\n"
+        f"💰 Importe: *{anotateVolume(usd)} USD*\n"
+        f"💵 Precio: {precio}\n"
+        f"📊 24h: {chg_str} | Vol: {vol_str}\n"
+        f"━━━━━━━━━━━━━━━\n"
+        f"[📈 Kraken](https://pro.kraken.com/app/trade/{pair.replace('/','-')})"
+    )
+    try:
+        url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+        requests.post(url, json={"chat_id": bot_chatID, "parse_mode": "Markdown",
+                                 "text": tg, "link_preview_options": {"is_disabled": True}}, timeout=10)
+        print(f"🚨 Alerta mega-ballena enviada: {pair} {usd:,.0f}USD")
+    except Exception as e:
+        print(f"⚠️ Error alerta TG mega: {e}")
+
+    # SMS con los datos de la moneda
+    sms = f"MEGA BALLENA {lado} {pair}: {anotateVolume(usd)}USD @ {precio} | 24h {chg_str} | Vol {vol_str}"
+    enviar_sms(sms)
+
+
 def tradeLoop(pairsList, wsnames, pairs, eurPrices, label):
     print(f"[{label}] Conectando {len(pairsList)} pares...")
     ws = connectToWS(pairsList)
@@ -2479,6 +2534,15 @@ def tradeLoop(pairsList, wsnames, pairs, eurPrices, label):
                         TGmsg = createTGmessage(tradeDF, pair, volInEUR, priceDiff, wsnames, pairs, ticker, c7d, None)
                         tg_response = telegram_bot_sendtext(TGmsg)
                         msg_id = tg_response.get("result", {}).get("message_id")
+
+                        # ALERTA MEGA-BALLENA: compra gigante >= 100K → notificación extra + SMS
+                        _side_now = tradeDF["side"].iloc[0]
+                        if _side_now == "b" and volInEUR >= MEGA_BALLENA_USD:
+                            threading.Thread(
+                                target=alerta_mega_ballena,
+                                args=(pair, _side_now, volInEUR, tradeDF["price"].iloc[-1], ticker),
+                                daemon=True
+                            ).start()
 
                         # 2. Calcular score IA en background y enviar como reply
                         def send_ai_score_reply(pair=pair, priceDiff=priceDiff, volInEUR=volInEUR,
