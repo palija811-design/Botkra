@@ -46,6 +46,7 @@ ACUM_MIN_COMPRAS   = 8      # nº mínimo de ballenas distintas comprando
 ACUM_VENTANA_HORAS = 48     # ventana de tiempo a analizar
 ACUM_MAX_SUBIDA    = 15.0   # si el precio ya subió más de esto, llegamos tarde (no alertar)
 ACUM_COOLDOWN_H    = 12     # no repetir alerta del mismo par en X horas
+ACUM_MIN_USD_TRADE = 5000   # compra mínima para registrar en el canal de acumulación (independiente del 2%)
 # Base de datos
 DB_PATH = os.getenv("DB_PATH", "/data/signals.db")
 
@@ -109,6 +110,19 @@ def init_db():
             pct_change  REAL,
             FOREIGN KEY (signal_id) REFERENCES signals(id)
         )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS acumulacion_trades (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp   TEXT NOT NULL,
+            pair        TEXT NOT NULL,
+            side        TEXT NOT NULL,
+            volume_usd  REAL,
+            price       REAL
+        )
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_acum_pair_time ON acumulacion_trades(pair, timestamp)
     """)
     conn.commit()
     conn.close()
@@ -2402,6 +2416,29 @@ def enviar_sms(texto):
 # Cooldown de alertas de acumulación por par
 _acum_ultima_alerta = {}
 
+def registrar_trade_acumulacion(pair, side, volume_usd, price):
+    """Registra TODA compra/venta de ballena para el análisis de acumulación,
+    independientemente de si movió el precio o no. Este es el canal separado
+    que capta la acumulación silenciosa (patrón AKE)."""
+    from datetime import datetime
+    try:
+        with db_lock:
+            conn = sqlite3.connect(DB_PATH, timeout=10)
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute(
+                "INSERT INTO acumulacion_trades (timestamp, pair, side, volume_usd, price) VALUES (?,?,?,?,?)",
+                (datetime.utcnow().isoformat(), pair, side, volume_usd, price)
+            )
+            # Limpieza: borrar registros de más de 7 días para no crecer sin límite
+            from datetime import timedelta
+            corte = (datetime.utcnow() - timedelta(days=7)).isoformat()
+            conn.execute("DELETE FROM acumulacion_trades WHERE timestamp < ?", (corte,))
+            conn.commit()
+            conn.close()
+    except Exception as e:
+        print(f"Error registrar_trade_acumulacion: {e}")
+
+
 def detectar_acumulacion(pair):
     """Detecta el patrón de acumulación de ballenas que precedió al x24 de AKE:
     muchas ballenas comprando (ratio 2:1+), varias distintas, y precio aún sin dispararse.
@@ -2417,15 +2454,16 @@ def detectar_acumulacion(pair):
         since = (datetime.utcnow() - timedelta(hours=ACUM_VENTANA_HORAS)).isoformat()
         conn = sqlite3.connect(DB_PATH, timeout=5)
         conn.row_factory = sqlite3.Row
+        # Leer del canal de acumulación (TODAS las ballenas, aunque no movieran el precio)
         rows = conn.execute(
-            "SELECT timestamp, side, volume_eur, price_to FROM signals WHERE pair=? AND timestamp>=? ORDER BY timestamp ASC",
+            "SELECT timestamp, side, volume_usd, price FROM acumulacion_trades WHERE pair=? AND timestamp>=? ORDER BY timestamp ASC",
             (pair, since)
         ).fetchall()
         conn.close()
         if len(rows) < ACUM_MIN_COMPRAS:
             return None
 
-        # Contar ballenas distintas por lado (señales separadas >5min = ballena distinta)
+        # Contar ballenas distintas por lado (trades separados >5min = ballena distinta)
         n_compra = n_venta = 0
         vol_compra = vol_venta = 0.0
         prev = {}
@@ -2435,7 +2473,7 @@ def detectar_acumulacion(pair):
             if side not in prev or (t - prev[side]).total_seconds()/60 > 5:
                 if side == "b": n_compra += 1
                 else: n_venta += 1
-            if side == "b": vol_compra += (r["volume_eur"] or 0)
+            if side == "b": vol_compra += (r["volume_usd"] or 0)
             else: vol_venta += (r["volume_eur"] or 0)
             prev[side] = t
 
@@ -2447,7 +2485,7 @@ def detectar_acumulacion(pair):
         if ratio < ACUM_RATIO_MIN:
             return None
         # Criterio 3: el precio aún no se ha disparado (acumulación silenciosa)
-        precios = [r["price_to"] for r in rows if r["price_to"]]
+        precios = [r["price"] for r in rows if r["price"]]
         if len(precios) >= 2:
             subida = (precios[-1] - precios[0]) / precios[0] * 100
         else:
@@ -2621,6 +2659,27 @@ def tradeLoop(pairsList, wsnames, pairs, eurPrices, label):
                 else:
                     umbral_pct = 2.0     # cryptos normales: umbral estándar
                     vol_min_op = 15000
+
+                # ─── CANAL DE ACUMULACIÓN (independiente del movimiento) ───
+                # Registra TODA ballena >= ACUM_MIN_USD_TRADE aunque el precio esté plano.
+                # Esto capta la acumulación silenciosa (patrón AKE) que el filtro del 2% se perdía.
+                if volInEUR >= ACUM_MIN_USD_TRADE:
+                    _side_acum = tradeDF["side"].iloc[0]
+                    _precio_acum = float(tradeDF["price"].iloc[-1])
+                    registrar_trade_acumulacion(pair, _side_acum, volInEUR, _precio_acum)
+                    # Si es compra, comprobar si se ha formado el patrón de acumulación
+                    if _side_acum == "b":
+                        def _check_acum_channel(pair=pair):
+                            datos = detectar_acumulacion(pair)
+                            if datos:
+                                tk = get_ticker_24h(pair)
+                                # Filtrar stables/forex: no nos interesan para acumulación
+                                _tb = pair.split("/")[0].upper() if "/" in pair else pair.upper()
+                                if _tb in STABLES_FIAT:
+                                    return
+                                alerta_acumulacion(pair, datos, tk)
+                        threading.Thread(target=_check_acum_channel, daemon=True).start()
+
                 if(priceDiff > umbral_pct and volInEUR > vol_min_op):  # volInEUR es realmente vol en USD equivalente
                     priceDiff = round(priceDiff, 3)
                     print(f"\U0001F433 [{label}]", priceDiff, pair, f"(umbral {umbral_pct}%)")
@@ -2654,14 +2713,6 @@ def tradeLoop(pairsList, wsnames, pairs, eurPrices, label):
                                 args=(pair, _side_now, volInEUR, tradeDF["price"].iloc[-1], ticker),
                                 daemon=True
                             ).start()
-
-                        # ALERTA ACUMULACIÓN: patrón de muchas ballenas comprando (pre-pump tipo AKE)
-                        if _side_now == "b":
-                            def _check_acum(pair=pair, ticker=ticker):
-                                datos = detectar_acumulacion(pair)
-                                if datos:
-                                    alerta_acumulacion(pair, datos, ticker)
-                            threading.Thread(target=_check_acum, daemon=True).start()
 
                         # 2. Calcular score IA en background y enviar como reply
                         def send_ai_score_reply(pair=pair, priceDiff=priceDiff, volInEUR=volInEUR,
