@@ -40,6 +40,12 @@ HTTPSMS_API_KEY = os.getenv("HTTPSMS_API_KEY", "uk_5fp9LuMMkaBFiWXY6tJWHVRKKLzFF
 HTTPSMS_FROM    = os.getenv("HTTPSMS_FROM", "+34667288899")
 HTTPSMS_TO      = os.getenv("HTTPSMS_TO", "+34693800942")
 MEGA_BALLENA_USD = 100000   # umbral compra gigante para alerta extra + SMS
+# ── Alerta de ACUMULACIÓN (patrón que precedió al x24 de AKE) ──
+ACUM_RATIO_MIN     = 2.0    # ratio compras/ventas mínimo (ballenas comprando el doble)
+ACUM_MIN_COMPRAS   = 8      # nº mínimo de ballenas distintas comprando
+ACUM_VENTANA_HORAS = 48     # ventana de tiempo a analizar
+ACUM_MAX_SUBIDA    = 15.0   # si el precio ya subió más de esto, llegamos tarde (no alertar)
+ACUM_COOLDOWN_H    = 12     # no repetir alerta del mismo par en X horas
 # Base de datos
 DB_PATH = os.getenv("DB_PATH", "/data/signals.db")
 
@@ -2393,6 +2399,111 @@ def enviar_sms(texto):
         print(f"⚠️ Error httpSMS: {e}")
 
 
+# Cooldown de alertas de acumulación por par
+_acum_ultima_alerta = {}
+
+def detectar_acumulacion(pair):
+    """Detecta el patrón de acumulación de ballenas que precedió al x24 de AKE:
+    muchas ballenas comprando (ratio 2:1+), varias distintas, y precio aún sin dispararse.
+    Devuelve dict con los datos si cumple el patrón, o None."""
+    from datetime import datetime, timedelta
+    import time as _t
+    try:
+        # Cooldown: no repetir el mismo par en ACUM_COOLDOWN_H horas
+        now = _t.time()
+        if pair in _acum_ultima_alerta and now - _acum_ultima_alerta[pair] < ACUM_COOLDOWN_H*3600:
+            return None
+
+        since = (datetime.utcnow() - timedelta(hours=ACUM_VENTANA_HORAS)).isoformat()
+        conn = sqlite3.connect(DB_PATH, timeout=5)
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute(
+            "SELECT timestamp, side, volume_eur, price_to FROM signals WHERE pair=? AND timestamp>=? ORDER BY timestamp ASC",
+            (pair, since)
+        ).fetchall()
+        conn.close()
+        if len(rows) < ACUM_MIN_COMPRAS:
+            return None
+
+        # Contar ballenas distintas por lado (señales separadas >5min = ballena distinta)
+        n_compra = n_venta = 0
+        vol_compra = vol_venta = 0.0
+        prev = {}
+        for r in rows:
+            t = datetime.fromisoformat(r["timestamp"])
+            side = r["side"]
+            if side not in prev or (t - prev[side]).total_seconds()/60 > 5:
+                if side == "b": n_compra += 1
+                else: n_venta += 1
+            if side == "b": vol_compra += (r["volume_eur"] or 0)
+            else: vol_venta += (r["volume_eur"] or 0)
+            prev[side] = t
+
+        # Criterio 1: suficientes ballenas comprando
+        if n_compra < ACUM_MIN_COMPRAS:
+            return None
+        # Criterio 2: ratio compras/ventas alto
+        ratio = n_compra / max(n_venta, 1)
+        if ratio < ACUM_RATIO_MIN:
+            return None
+        # Criterio 3: el precio aún no se ha disparado (acumulación silenciosa)
+        precios = [r["price_to"] for r in rows if r["price_to"]]
+        if len(precios) >= 2:
+            subida = (precios[-1] - precios[0]) / precios[0] * 100
+        else:
+            subida = 0
+        if subida > ACUM_MAX_SUBIDA:
+            return None  # ya subió, llegamos tarde
+
+        return {
+            "n_compra": n_compra, "n_venta": n_venta, "ratio": round(ratio, 1),
+            "vol_compra": vol_compra, "subida_actual": round(subida, 1),
+            "precio": precios[-1] if precios else None
+        }
+    except Exception as e:
+        print(f"Error detectar_acumulacion {pair}: {e}")
+        return None
+
+
+def alerta_acumulacion(pair, datos, ticker):
+    """Notificación destacada de acumulación de ballenas (patrón pre-pump tipo AKE)."""
+    import time as _t
+    _acum_ultima_alerta[pair] = _t.time()
+    mcap = None
+    try:
+        cg = get_coingecko_full(pair)
+        mcap = (cg or {}).get("market_cap_usd")
+    except Exception:
+        pass
+    mcap_str = f"{mcap/1e6:.0f}M$" if mcap else "?"
+    chg24 = ticker.get("change_24h") if ticker else None
+    chg_str = f"{chg24:+.2f}%" if chg24 is not None else "?"
+
+    tg = (
+        f"🟢📈 *ACUMULACIÓN DETECTADA* 📈🟢\n"
+        f"━━━━━━━━━━━━━━━\n"
+        f"*{pair}* — patrón pre-subida\n"
+        f"🐳 {datos['n_compra']} ballenas COMPRANDO vs {datos['n_venta']} vendiendo (ratio {datos['ratio']}:1)\n"
+        f"💰 Volumen comprador: {anotateVolume(datos['vol_compra'])} USD\n"
+        f"📉 Precio aún plano: {datos['subida_actual']:+.1f}% en {ACUM_VENTANA_HORAS}h\n"
+        f"🏷 Market cap: {mcap_str} | 24h: {chg_str}\n"
+        f"━━━━━━━━━━━━━━━\n"
+        f"_Muchas ballenas acumulando sin que el precio reaccione aún._\n"
+        f"[📈 Kraken](https://pro.kraken.com/app/trade/{pair.replace('/','-')})"
+    )
+    try:
+        url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+        requests.post(url, json={"chat_id": bot_chatID, "parse_mode": "Markdown",
+                                 "text": tg, "link_preview_options": {"is_disabled": True}}, timeout=10)
+        print(f"🟢 Alerta ACUMULACIÓN enviada: {pair} ({datos['ratio']}:1)")
+    except Exception as e:
+        print(f"⚠️ Error alerta acumulación: {e}")
+
+    # SMS también
+    sms = f"ACUMULACION {pair}: {datos['n_compra']} ballenas comprando (ratio {datos['ratio']}:1), precio plano {datos['subida_actual']:+.1f}%, mcap {mcap_str}"
+    enviar_sms(sms)
+
+
 def alerta_mega_ballena(pair, side, usd, precio, ticker):
     """Notificación destacada (Telegram + SMS) para compras gigantes >= MEGA_BALLENA_USD."""
     lado = "COMPRA" if side == "b" else "VENTA"
@@ -2543,6 +2654,14 @@ def tradeLoop(pairsList, wsnames, pairs, eurPrices, label):
                                 args=(pair, _side_now, volInEUR, tradeDF["price"].iloc[-1], ticker),
                                 daemon=True
                             ).start()
+
+                        # ALERTA ACUMULACIÓN: patrón de muchas ballenas comprando (pre-pump tipo AKE)
+                        if _side_now == "b":
+                            def _check_acum(pair=pair, ticker=ticker):
+                                datos = detectar_acumulacion(pair)
+                                if datos:
+                                    alerta_acumulacion(pair, datos, ticker)
+                            threading.Thread(target=_check_acum, daemon=True).start()
 
                         # 2. Calcular score IA en background y enviar como reply
                         def send_ai_score_reply(pair=pair, priceDiff=priceDiff, volInEUR=volInEUR,
