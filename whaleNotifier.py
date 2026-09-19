@@ -38,7 +38,7 @@ ANTHROPIC_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 # httpSMS — alertas SMS para mega-ballenas
 HTTPSMS_API_KEY = os.getenv("HTTPSMS_API_KEY", "uk_5fp9LuMMkaBFiWXY6tJWHVRKKLzFFwOLj-fE92SER0mSPx67F6vgc3Dlh1DKcVHy")
 HTTPSMS_FROM    = os.getenv("HTTPSMS_FROM", "+34667288899")
-HTTPSMS_TO      = os.getenv("HTTPSMS_TO", "+34693800942")
+HTTPSMS_TO      = os.getenv("HTTPSMS_TO", "+34693800942,+34638490822")
 MEGA_BALLENA_USD = 100000   # umbral compra gigante para alerta extra + SMS
 # ── Alerta de ACUMULACIÓN (patrón que precedió al x24 de AKE) ──
 ACUM_RATIO_MIN     = 2.0    # ratio compras/ventas mínimo (ballenas comprando el doble)
@@ -2396,21 +2396,28 @@ def twilio_llamada(pair, priceDiff, volInEUR):
         print(f"⚠️ Error Twilio: {e}")
 
 
+# Interruptor de SMS: puesto en False para desactivar los avisos por SMS
+SMS_ACTIVADO = False
+
 def enviar_sms(texto):
-    """Envía un SMS vía httpSMS (usa tu móvil Android como pasarela)."""
+    """Envía un SMS vía httpSMS a uno o varios números (HTTPSMS_TO separados por coma)."""
+    if not SMS_ACTIVADO:
+        return
     if not (HTTPSMS_API_KEY and HTTPSMS_FROM and HTTPSMS_TO):
         print("⚠️ httpSMS no configurado (faltan variables)")
         return
-    try:
-        r = requests.post(
-            "https://api.httpsms.com/v1/messages/send",
-            headers={"x-api-key": HTTPSMS_API_KEY, "Content-Type": "application/json"},
-            json={"from": HTTPSMS_FROM, "to": HTTPSMS_TO, "content": texto[:300]},
-            timeout=10
-        )
-        print(f"📱 SMS enviado: {r.status_code}")
-    except Exception as e:
-        print(f"⚠️ Error httpSMS: {e}")
+    destinos = [n.strip() for n in HTTPSMS_TO.split(",") if n.strip()]
+    for destino in destinos:
+        try:
+            r = requests.post(
+                "https://api.httpsms.com/v1/messages/send",
+                headers={"x-api-key": HTTPSMS_API_KEY, "Content-Type": "application/json"},
+                json={"from": HTTPSMS_FROM, "to": destino, "content": texto[:300]},
+                timeout=10
+            )
+            print(f"📱 SMS enviado a {destino}: {r.status_code}")
+        except Exception as e:
+            print(f"⚠️ Error httpSMS a {destino}: {e}")
 
 
 # Cooldown de alertas de acumulación por par
@@ -2700,6 +2707,20 @@ def tradeLoop(pairsList, wsnames, pairs, eurPrices, label):
                         _tok = pair.split("/")[0] if "/" in pair else pair
                         for _s in [".S",".P",".M","2"]: _tok = _tok.replace(_s,"")
                         c7d = _cg_cache.get("7d_" + _tok)
+
+                        # Solo notificar si hay una CRIPTO REAL en el par (no fiat ni stablecoin).
+                        # Excluye: forex (EUR/USD), stable/fiat (USDT/CHF), fiat/stable (EUR/USDT), stable/stable (USDC/USDT)
+                        FIAT_SET = {"USD","EUR","GBP","JPY","CHF","CAD","AUD","NZD","SEK",
+                                    "NOK","DKK","PLN","MXN","SGD","HKD","ZAR","TRY","CZK","HUF"}
+                        STABLE_SET = {"USDT","USDC","DAI","TUSD","BUSD","USDP","PYUSD","GUSD","EURT","EURC","EURR","XAUT"}
+                        _parts = pair.split("/")
+                        def _es_cripto_real(sym):
+                            s = sym.upper()
+                            return s not in FIAT_SET and s not in STABLE_SET
+                        _hay_cripto = len(_parts) == 2 and (_es_cripto_real(_parts[0]) or _es_cripto_real(_parts[1]))
+                        if not _hay_cripto:
+                            print(f"🔇 [{label}] {pair} — sin cripto real, no notificada")
+                            continue
                         # 1. Enviar señal inmediatamente sin score IA
                         TGmsg = createTGmessage(tradeDF, pair, volInEUR, priceDiff, wsnames, pairs, ticker, c7d, None)
                         tg_response = telegram_bot_sendtext(TGmsg)
