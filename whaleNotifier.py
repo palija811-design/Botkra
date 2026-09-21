@@ -1152,6 +1152,39 @@ def launch_tracker(signal_id, pair, entry_price):
 # ─────────────────────────────────────────────
 
 # ─── Plantillas del Feed y Admin ───
+ADMIN_LOGIN_HTML = """<!DOCTYPE html><html lang=es><head><meta charset=utf-8>
+<meta name=viewport content="width=device-width,initial-scale=1">
+<title>Acceso</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:-apple-system,Segoe UI,Roboto,sans-serif}
+body{background:#0b0e11;color:#eaecef;min-height:100vh;display:flex;align-items:center;justify-content:center}
+.box{background:#181a20;border:1px solid #2b3139;border-radius:14px;padding:2.5rem;width:90%;max-width:340px}
+h1{font-size:1.3rem;margin-bottom:0.4rem;color:#fcd535}
+p{color:#848e9c;font-size:0.85rem;margin-bottom:1.5rem}
+input{width:100%;padding:0.85rem;margin-bottom:0.9rem;background:#0b0e11;border:1px solid #2b3139;border-radius:8px;color:#eaecef;font-size:0.95rem}
+input:focus{outline:none;border-color:#fcd535}
+button{width:100%;padding:0.85rem;background:#fcd535;color:#0b0e11;border:none;border-radius:8px;font-weight:700;font-size:0.95rem;cursor:pointer}
+button:hover{background:#f0b90b}
+.err{color:#f6465d;font-size:0.85rem;margin-top:0.8rem;text-align:center;min-height:1.2rem}
+</style></head><body>
+<div class=box>
+<h1>🐋 Whale Dashboard</h1>
+<p>Introduce la contraseña para acceder</p>
+<input type=password id=p placeholder="Contraseña" autocomplete=current-password autofocus>
+<button onclick=entrar()>Entrar</button>
+<div class=err id=err></div>
+</div>
+<script>
+async function entrar(){
+  var p=document.getElementById('p').value;
+  var r=await fetch('/api/admin/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:p})});
+  var d=await r.json();
+  if(d.ok){location.reload();}else{document.getElementById('err').textContent=d.error||'Error';}
+}
+document.getElementById('p').addEventListener('keypress',function(e){if(e.key==='Enter')entrar();});
+</script>
+</body></html>"""
+
 FEED_LOGIN_HTML = """<!DOCTYPE html><html lang=es><head><meta charset=utf-8>
 <meta name=viewport content="width=device-width,initial-scale=1">
 <title>Feed - Acceso</title>
@@ -1323,15 +1356,17 @@ DASH_PASS = os.getenv("DASH_PASS", "Admin1234")
 
 # Sesiones simples en memoria para el feed (token -> username)
 _feed_sessions = {}
+# Sesiones de admin (token -> True)
+_admin_sessions = set()
 
 def _hash_pass(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
 def _check_admin_auth():
-    """Auth de admin (dashboard + panel): usuario/contraseña fijos vía Basic Auth."""
+    """Auth de admin (dashboard + panel): sesión por cookie, solo contraseña."""
     from flask import request as _rq
-    auth = _rq.authorization
-    return auth and auth.username == DASH_USER and auth.password == DASH_PASS
+    token = _rq.cookies.get("admin_token", "")
+    return token in _admin_sessions
 
 def _feed_user_valido(username, password):
     """Comprueba credenciales de un usuario del feed y que esté activo."""
@@ -1355,18 +1390,20 @@ def _feed_user_valido(username, password):
 
 @app.before_request
 def _require_login():
-    from flask import Response, request as _rq
+    from flask import Response, request as _rq, render_template_string as _rts
     path = _rq.path
-    # Rutas del feed: gestionan su propia sesión, no Basic Auth
+    # Rutas del feed: gestionan su propia sesión
     if path.startswith("/feed") or path.startswith("/api/feed"):
         return None
-    # Todo lo demás (dashboard + /admin + /api/*) requiere admin
+    # Login de admin: rutas abiertas para poder autenticarse
+    if path == "/api/admin/login" or path == "/login":
+        return None
+    # Todo lo demás (dashboard + /admin + /api/*) requiere sesión de admin
     if not _check_admin_auth():
-        return Response(
-            "Acceso restringido. Introduce usuario y contraseña.",
-            401,
-            {"WWW-Authenticate": 'Basic realm="Whale Dashboard"'}
-        )
+        # Para peticiones API devolver 401 JSON; para páginas, mostrar login
+        if path.startswith("/api/"):
+            return jsonify({"error": "no autorizado"}), 401
+        return _rts(ADMIN_LOGIN_HTML)
 
 HTML = """
 <!DOCTYPE html>
@@ -2015,6 +2052,29 @@ def get_reversion(signal_id, minutes_target):
 @app.route('/')
 def index():
     return render_template_string(HTML)
+
+# ══════════════ LOGIN ADMIN (solo contraseña) ══════════════
+@app.route('/api/admin/login', methods=['POST'])
+def admin_login():
+    from flask import request as _rq
+    data = _rq.get_json(force=True, silent=True) or {}
+    password = data.get("password") or ""
+    if password != DASH_PASS:
+        return jsonify({"ok": False, "error": "Contraseña incorrecta"}), 401
+    token = secrets.token_hex(16)
+    _admin_sessions.add(token)
+    resp = jsonify({"ok": True})
+    resp.set_cookie("admin_token", token, max_age=7*24*3600, httponly=True, samesite="Lax")
+    return resp
+
+@app.route('/api/admin/logout', methods=['POST'])
+def admin_logout():
+    from flask import request as _rq
+    token = _rq.cookies.get("admin_token", "")
+    _admin_sessions.discard(token)
+    resp = jsonify({"ok": True})
+    resp.set_cookie("admin_token", "", max_age=0)
+    return resp
 
 # ══════════════ FEED (usuarios) ══════════════
 @app.route('/feed')
