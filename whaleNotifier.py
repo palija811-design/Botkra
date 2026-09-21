@@ -124,6 +124,16 @@ def init_db():
     conn.execute("""
         CREATE INDEX IF NOT EXISTS idx_acum_pair_time ON acumulacion_trades(pair, timestamp)
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS feed_users (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            username     TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL,
+            estado       TEXT NOT NULL DEFAULT 'activo',
+            created_at   TEXT NOT NULL,
+            expires_at   TEXT
+        )
+    """)
     conn.commit()
     conn.close()
     print(f"BD lista en: {DB_PATH}")
@@ -1140,7 +1150,223 @@ def launch_tracker(signal_id, pair, entry_price):
 # ─────────────────────────────────────────────
 # DASHBOARD FLASK
 # ─────────────────────────────────────────────
+
+# ─── Plantillas del Feed y Admin ───
+FEED_LOGIN_HTML = """<!DOCTYPE html><html lang=es><head><meta charset=utf-8>
+<meta name=viewport content="width=device-width,initial-scale=1">
+<title>Feed - Acceso</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:-apple-system,Segoe UI,Roboto,sans-serif}
+body{background:#0b0e11;color:#eaecef;min-height:100vh;display:flex;align-items:center;justify-content:center}
+.box{background:#181a20;border:1px solid #2b3139;border-radius:14px;padding:2.5rem;width:90%;max-width:360px}
+h1{font-size:1.3rem;margin-bottom:0.4rem;color:#fcd535}
+p{color:#848e9c;font-size:0.85rem;margin-bottom:1.5rem}
+input{width:100%;padding:0.8rem;margin-bottom:0.9rem;background:#0b0e11;border:1px solid #2b3139;border-radius:8px;color:#eaecef;font-size:0.95rem}
+input:focus{outline:none;border-color:#fcd535}
+button{width:100%;padding:0.85rem;background:#fcd535;color:#0b0e11;border:none;border-radius:8px;font-weight:700;font-size:0.95rem;cursor:pointer}
+button:hover{background:#f0b90b}
+.err{color:#f6465d;font-size:0.85rem;margin-top:0.8rem;text-align:center;min-height:1.2rem}
+</style></head><body>
+<div class=box>
+<h1>🐋 Whale Feed</h1>
+<p>Introduce tus credenciales para ver las señales</p>
+<input type=text id=u placeholder="Usuario" autocomplete=username>
+<input type=password id=p placeholder="Contraseña" autocomplete=current-password>
+<button onclick=login()>Entrar</button>
+<div class=err id=err></div>
+</div>
+<script>
+async function login(){
+  var u=document.getElementById('u').value, p=document.getElementById('p').value;
+  var r=await fetch('/api/feed/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p})});
+  var d=await r.json();
+  if(d.ok){location.reload();}else{document.getElementById('err').textContent=d.error||'Error';}
+}
+document.getElementById('p').addEventListener('keypress',function(e){if(e.key==='Enter')login();});
+</script>
+</body></html>"""
+
+FEED_HTML = """<!DOCTYPE html><html lang=es><head><meta charset=utf-8>
+<meta name=viewport content="width=device-width,initial-scale=1">
+<title>Whale Feed</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:-apple-system,Segoe UI,Roboto,sans-serif}
+body{background:#0b0e11;color:#eaecef;min-height:100vh}
+header{position:sticky;top:0;background:#181a20;border-bottom:1px solid #2b3139;padding:1rem 1.2rem;display:flex;justify-content:space-between;align-items:center;z-index:10}
+header h1{font-size:1.1rem;color:#fcd535}
+.logout{background:none;border:1px solid #2b3139;color:#848e9c;padding:0.4rem 0.8rem;border-radius:6px;font-size:0.75rem;cursor:pointer}
+.feed{max-width:600px;margin:0 auto;padding:1rem}
+.msg{background:#181a20;border:1px solid #2b3139;border-radius:12px;padding:1rem;margin-bottom:0.8rem;border-left:3px solid #848e9c}
+.msg.buy{border-left-color:#0ecb81}
+.msg.sell{border-left-color:#f6465d}
+.msg-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem}
+.pair{font-weight:700;font-size:1.05rem;color:#fcd535}
+.time{font-size:0.7rem;color:#848e9c}
+.pct{font-size:1.4rem;font-weight:700;margin:0.3rem 0}
+.pct.pos{color:#0ecb81}.pct.neg{color:#f6465d}
+.detail{font-size:0.85rem;color:#b7bdc6;line-height:1.6}
+.vol{color:#fcd535;font-weight:600}
+.loading{text-align:center;color:#848e9c;padding:2rem}
+</style></head><body>
+<header><h1>🐋 Whale Feed</h1><button class=logout onclick=logout()>Salir</button></header>
+<div class=feed id=feed><div class=loading>Cargando señales...</div></div>
+<script>
+function fmt(n){if(!n)return '0';if(n>=1e6)return (n/1e6).toFixed(1)+'M';if(n>=1e3)return (n/1e3).toFixed(1)+'K';return Math.round(n);}
+function fechaHora(ts){var d=new Date(ts.replace(' ','T'));var h=('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2);var hoy=new Date();var df=Math.round((new Date(hoy.getFullYear(),hoy.getMonth(),hoy.getDate())-new Date(d.getFullYear(),d.getMonth(),d.getDate()))/86400000);if(df===0)return 'hoy '+h;if(df===1)return 'ayer '+h;return ('0'+d.getDate()).slice(-2)+'/'+('0'+(d.getMonth()+1)).slice(-2)+' '+h;}
+async function load(){
+  var r=await fetch('/api/feed/signals');
+  if(r.status===401){location.reload();return;}
+  var data=await r.json();
+  if(!data.length){document.getElementById('feed').innerHTML='<div class=loading>Aún no hay señales</div>';return;}
+  var html='';
+  data.forEach(function(s){
+    var buy=s.side==='b';
+    var emoji=buy?'🟢🐳':'🔴🐳';
+    var pctCls=s.price_diff_pct>=0?'pos':'neg';
+    html+='<div class="msg '+(buy?'buy':'sell')+'">';
+    html+='<div class=msg-head><span class=pair>'+emoji+' '+s.pair+'</span><span class=time>'+fechaHora(s.timestamp)+'</span></div>';
+    html+='<div class="pct '+pctCls+'">'+(s.price_diff_pct>=0?'+':'')+s.price_diff_pct+'%</div>';
+    html+='<div class=detail>💰 <span class=vol>'+fmt(s.volume_eur)+' USD</span><br>💵 Precio: '+s.price_to+'</div>';
+    html+='</div>';
+  });
+  document.getElementById('feed').innerHTML=html;
+}
+async function logout(){await fetch('/api/feed/logout',{method:'POST'});location.reload();}
+load();setInterval(load,30000);
+</script>
+</body></html>"""
+
+ADMIN_HTML = """<!DOCTYPE html><html lang=es><head><meta charset=utf-8>
+<meta name=viewport content="width=device-width,initial-scale=1">
+<title>Admin - Usuarios Feed</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:-apple-system,Segoe UI,Roboto,sans-serif}
+body{background:#0b0e11;color:#eaecef;min-height:100vh;padding:1.5rem}
+h1{color:#fcd535;font-size:1.3rem;margin-bottom:1.5rem}
+.card{background:#181a20;border:1px solid #2b3139;border-radius:12px;padding:1.2rem;max-width:700px;margin:0 auto 1.2rem}
+.card h2{font-size:0.95rem;margin-bottom:1rem;color:#eaecef}
+.row{display:flex;gap:0.6rem;flex-wrap:wrap}
+input{flex:1;min-width:120px;padding:0.7rem;background:#0b0e11;border:1px solid #2b3139;border-radius:8px;color:#eaecef}
+input:focus{outline:none;border-color:#fcd535}
+button{padding:0.7rem 1.2rem;background:#fcd535;color:#0b0e11;border:none;border-radius:8px;font-weight:700;cursor:pointer}
+button:hover{background:#f0b90b}
+table{width:100%;border-collapse:collapse;margin-top:0.5rem}
+th,td{text-align:left;padding:0.6rem 0.5rem;border-bottom:1px solid #2b3139;font-size:0.85rem}
+th{color:#848e9c;font-weight:600}
+.badge{padding:0.2rem 0.5rem;border-radius:4px;font-size:0.7rem;font-weight:600}
+.activo{background:rgba(14,203,129,0.15);color:#0ecb81}
+.pausado{background:rgba(246,70,93,0.15);color:#f6465d}
+.btn-sm{padding:0.3rem 0.6rem;font-size:0.7rem;margin-right:0.3rem;background:#2b3139;color:#eaecef}
+.btn-sm:hover{background:#3b4149}
+.btn-del{background:rgba(246,70,93,0.2);color:#f6465d}
+.err{color:#f6465d;font-size:0.8rem;margin-top:0.6rem;min-height:1rem}
+</style></head><body>
+<h1>👤 Gestión de usuarios del Feed</h1>
+<div class=card>
+<h2>Crear cuenta nueva</h2>
+<div class=row>
+<input type=text id=nu placeholder="Usuario">
+<input type=text id=np placeholder="Contraseña">
+<button onclick=crear()>Crear</button>
+</div>
+<div class=err id=err></div>
+</div>
+<div class=card>
+<h2>Cuentas existentes</h2>
+<table id=tabla><thead><tr><th>Usuario</th><th>Estado</th><th>Creada</th><th>Acciones</th></tr></thead><tbody></tbody></table>
+</div>
+<script>
+async function cargar(){
+  var r=await fetch('/api/admin/users');var users=await r.json();
+  var tb=document.querySelector('#tabla tbody');tb.innerHTML='';
+  if(!users.length){tb.innerHTML='<tr><td colspan=4 style="color:#848e9c;text-align:center">Sin usuarios todavía</td></tr>';return;}
+  users.forEach(function(u){
+    var fecha=u.created_at?u.created_at.substring(0,10):'-';
+    var tr='<tr><td>'+u.username+'</td>';
+    tr+='<td><span class="badge '+u.estado+'">'+u.estado+'</span></td>';
+    tr+='<td>'+fecha+'</td><td>';
+    if(u.estado==='activo')tr+='<button class="btn-sm" onclick="estado('+u.id+',\'pausado\')">Pausar</button>';
+    else tr+='<button class="btn-sm" onclick="estado('+u.id+',\'activo\')">Activar</button>';
+    tr+='<button class="btn-sm btn-del" onclick="elim('+u.id+',\''+u.username+'\')">Eliminar</button>';
+    tr+='</td></tr>';
+    tb.innerHTML+=tr;
+  });
+}
+async function crear(){
+  var u=document.getElementById('nu').value,p=document.getElementById('np').value;
+  var r=await fetch('/api/admin/users',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p})});
+  var d=await r.json();
+  if(d.ok){document.getElementById('nu').value='';document.getElementById('np').value='';document.getElementById('err').textContent='';cargar();}
+  else document.getElementById('err').textContent=d.error||'Error';
+}
+async function estado(id,e){
+  await fetch('/api/admin/users/'+id+'/estado',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({estado:e})});
+  cargar();
+}
+async function elim(id,nombre){
+  if(!confirm('¿Eliminar la cuenta "'+nombre+'"? Esta acción no se puede deshacer.'))return;
+  await fetch('/api/admin/users/'+id,{method:'DELETE'});
+  cargar();
+}
+cargar();
+</script>
+</body></html>"""
+
 app = Flask(__name__)
+
+# ─── Autenticación ───
+import hashlib, secrets
+from datetime import datetime, timedelta
+
+DASH_USER = os.getenv("DASH_USER", "admin")
+DASH_PASS = os.getenv("DASH_PASS", "Admin1234")
+
+# Sesiones simples en memoria para el feed (token -> username)
+_feed_sessions = {}
+
+def _hash_pass(password):
+    return hashlib.sha256(password.encode()).hexdigest()
+
+def _check_admin_auth():
+    """Auth de admin (dashboard + panel): usuario/contraseña fijos vía Basic Auth."""
+    from flask import request as _rq
+    auth = _rq.authorization
+    return auth and auth.username == DASH_USER and auth.password == DASH_PASS
+
+def _feed_user_valido(username, password):
+    """Comprueba credenciales de un usuario del feed y que esté activo."""
+    try:
+        conn = sqlite3.connect(DB_PATH, timeout=5)
+        conn.row_factory = sqlite3.Row
+        u = conn.execute("SELECT * FROM feed_users WHERE username=?", (username,)).fetchone()
+        conn.close()
+        if not u:
+            return False, "Usuario no encontrado"
+        if u["password_hash"] != _hash_pass(password):
+            return False, "Contraseña incorrecta"
+        if u["estado"] != "activo":
+            return False, "Cuenta pausada"
+        if u["expires_at"]:
+            if datetime.utcnow() > datetime.fromisoformat(u["expires_at"]):
+                return False, "Suscripción caducada"
+        return True, "OK"
+    except Exception as e:
+        return False, f"Error: {e}"
+
+@app.before_request
+def _require_login():
+    from flask import Response, request as _rq
+    path = _rq.path
+    # Rutas del feed: gestionan su propia sesión, no Basic Auth
+    if path.startswith("/feed") or path.startswith("/api/feed"):
+        return None
+    # Todo lo demás (dashboard + /admin + /api/*) requiere admin
+    if not _check_admin_auth():
+        return Response(
+            "Acceso restringido. Introduce usuario y contraseña.",
+            401,
+            {"WWW-Authenticate": 'Basic realm="Whale Dashboard"'}
+        )
 
 HTML = """
 <!DOCTYPE html>
@@ -1789,6 +2015,124 @@ def get_reversion(signal_id, minutes_target):
 @app.route('/')
 def index():
     return render_template_string(HTML)
+
+# ══════════════ FEED (usuarios) ══════════════
+@app.route('/feed')
+def feed_page():
+    from flask import request as _rq
+    token = _rq.cookies.get("feed_token", "")
+    if token not in _feed_sessions:
+        return render_template_string(FEED_LOGIN_HTML)
+    return render_template_string(FEED_HTML)
+
+@app.route('/api/feed/login', methods=['POST'])
+def feed_login():
+    from flask import Response, request as _rq
+    data = _rq.get_json(force=True, silent=True) or {}
+    username = (data.get("username") or "").strip()
+    password = data.get("password") or ""
+    ok, msg = _feed_user_valido(username, password)
+    if not ok:
+        return jsonify({"ok": False, "error": msg}), 401
+    token = secrets.token_hex(16)
+    _feed_sessions[token] = username
+    resp = jsonify({"ok": True})
+    resp.set_cookie("feed_token", token, max_age=7*24*3600, httponly=True, samesite="Lax")
+    return resp
+
+@app.route('/api/feed/logout', methods=['POST'])
+def feed_logout():
+    from flask import request as _rq
+    token = _rq.cookies.get("feed_token", "")
+    _feed_sessions.pop(token, None)
+    resp = jsonify({"ok": True})
+    resp.set_cookie("feed_token", "", max_age=0)
+    return resp
+
+@app.route('/api/feed/signals')
+def feed_signals():
+    from flask import request as _rq
+    token = _rq.cookies.get("feed_token", "")
+    if token not in _feed_sessions:
+        return jsonify({"error": "no autorizado"}), 401
+    # Mismas señales que se notifican: solo cripto real, más recientes primero
+    rows = db_get("SELECT * FROM signals ORDER BY id DESC LIMIT 100")
+    FIAT_SET = {"USD","EUR","GBP","JPY","CHF","CAD","AUD","NZD","SEK","NOK","DKK","PLN","MXN","SGD","HKD","ZAR","TRY","CZK","HUF"}
+    STABLE_SET = {"USDT","USDC","DAI","TUSD","BUSD","USDP","PYUSD","GUSD","EURT","EURC","EURR","XAUT"}
+    def cripto_real(pair):
+        parts = pair.split("/")
+        if len(parts) != 2: return True
+        def real(s): return s.upper() not in FIAT_SET and s.upper() not in STABLE_SET
+        return real(parts[0]) or real(parts[1])
+    filtradas = [r for r in rows if cripto_real(r["pair"])]
+    return jsonify(filtradas)
+
+# ══════════════ ADMIN (gestión de usuarios) ══════════════
+@app.route('/admin')
+def admin_page():
+    return render_template_string(ADMIN_HTML)
+
+@app.route('/api/admin/users', methods=['GET'])
+def admin_list_users():
+    users = db_get("SELECT id, username, estado, created_at, expires_at FROM feed_users ORDER BY id DESC")
+    return jsonify(users)
+
+@app.route('/api/admin/users', methods=['POST'])
+def admin_create_user():
+    from flask import request as _rq
+    data = _rq.get_json(force=True, silent=True) or {}
+    username = (data.get("username") or "").strip()
+    password = data.get("password") or ""
+    if not username or not password:
+        return jsonify({"ok": False, "error": "Usuario y contraseña obligatorios"}), 400
+    try:
+        with db_lock:
+            conn = sqlite3.connect(DB_PATH, timeout=10)
+            conn.execute("INSERT INTO feed_users (username, password_hash, estado, created_at) VALUES (?,?,?,?)",
+                         (username, _hash_pass(password), "activo", datetime.utcnow().isoformat()))
+            conn.commit(); conn.close()
+        return jsonify({"ok": True})
+    except sqlite3.IntegrityError:
+        return jsonify({"ok": False, "error": "Ese usuario ya existe"}), 400
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+@app.route('/api/admin/users/<int:uid>/estado', methods=['POST'])
+def admin_toggle_user(uid):
+    from flask import request as _rq
+    data = _rq.get_json(force=True, silent=True) or {}
+    nuevo = data.get("estado", "")
+    if nuevo not in ("activo", "pausado"):
+        return jsonify({"ok": False, "error": "estado inválido"}), 400
+    with db_lock:
+        conn = sqlite3.connect(DB_PATH, timeout=10)
+        conn.execute("UPDATE feed_users SET estado=? WHERE id=?", (nuevo, uid))
+        conn.commit(); conn.close()
+    # Si se pausa, cerrar sus sesiones activas
+    if nuevo == "pausado":
+        conn = sqlite3.connect(DB_PATH, timeout=5); conn.row_factory = sqlite3.Row
+        u = conn.execute("SELECT username FROM feed_users WHERE id=?", (uid,)).fetchone()
+        conn.close()
+        if u:
+            for tok, usr in list(_feed_sessions.items()):
+                if usr == u["username"]:
+                    _feed_sessions.pop(tok, None)
+    return jsonify({"ok": True})
+
+@app.route('/api/admin/users/<int:uid>', methods=['DELETE'])
+def admin_delete_user(uid):
+    conn = sqlite3.connect(DB_PATH, timeout=5); conn.row_factory = sqlite3.Row
+    u = conn.execute("SELECT username FROM feed_users WHERE id=?", (uid,)).fetchone()
+    conn.close()
+    with db_lock:
+        conn = sqlite3.connect(DB_PATH, timeout=10)
+        conn.execute("DELETE FROM feed_users WHERE id=?", (uid,))
+        conn.commit(); conn.close()
+    if u:
+        for tok, usr in list(_feed_sessions.items()):
+            if usr == u["username"]:
+                _feed_sessions.pop(tok, None)
+    return jsonify({"ok": True})
 
 @app.route('/api/signals')
 def api_signals():
