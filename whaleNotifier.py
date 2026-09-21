@@ -1233,12 +1233,24 @@ header h1{font-size:1.1rem;color:#fcd535}
 .msg.buy{border-left-color:#0ecb81}
 .msg.sell{border-left-color:#f6465d}
 .msg-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem}
-.pair{font-weight:700;font-size:1.05rem;color:#fcd535}
+.pair-link{font-weight:700;font-size:1.05rem;color:#fcd535;text-decoration:none}
+.pair-link:hover{text-decoration:underline}
 .time{font-size:0.7rem;color:#848e9c}
 .pct{font-size:1.4rem;font-weight:700;margin:0.3rem 0}
 .pct.pos{color:#0ecb81}.pct.neg{color:#f6465d}
-.detail{font-size:0.85rem;color:#b7bdc6;line-height:1.6}
+.detail{font-size:0.85rem;color:#b7bdc6;line-height:1.7}
 .vol{color:#fcd535;font-weight:600}
+.chg24{font-size:0.8rem;margin-top:0.3rem}
+.chg24.pos{color:#0ecb81}.chg24.neg{color:#f6465d}
+.score{margin-top:0.7rem;padding-top:0.7rem;border-top:1px solid #2b3139;font-size:0.85rem}
+.score-head{font-weight:700;margin-bottom:0.3rem}
+.dir{display:inline-block;padding:0.15rem 0.5rem;border-radius:4px;font-size:0.72rem;font-weight:700;margin-left:0.4rem}
+.dir.long{background:rgba(14,203,129,0.15);color:#0ecb81}
+.dir.short{background:rgba(246,70,93,0.15);color:#f6465d}
+.dir.neutral{background:rgba(132,142,156,0.15);color:#848e9c}
+.resumen{color:#848e9c;font-size:0.78rem;margin-top:0.25rem;line-height:1.5}
+.cmc{display:inline-block;margin-top:0.5rem;font-size:0.75rem;color:#848e9c;text-decoration:none;border:1px solid #2b3139;padding:0.25rem 0.6rem;border-radius:6px}
+.cmc:hover{border-color:#fcd535;color:#fcd535}
 .loading{text-align:center;color:#848e9c;padding:2rem}
 </style></head><body>
 <header><h1>🐋 Whale Feed</h1><button class=logout onclick=logout()>Salir</button></header>
@@ -1246,23 +1258,54 @@ header h1{font-size:1.1rem;color:#fcd535}
 <script>
 function fmt(n){if(!n)return '0';if(n>=1e6)return (n/1e6).toFixed(1)+'M';if(n>=1e3)return (n/1e3).toFixed(1)+'K';return Math.round(n);}
 function fechaHora(ts){var d=new Date(ts.replace(' ','T'));var h=('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2);var hoy=new Date();var df=Math.round((new Date(hoy.getFullYear(),hoy.getMonth(),hoy.getDate())-new Date(d.getFullYear(),d.getMonth(),d.getDate()))/86400000);if(df===0)return 'hoy '+h;if(df===1)return 'ayer '+h;return ('0'+d.getDate()).slice(-2)+'/'+('0'+(d.getMonth()+1)).slice(-2)+' '+h;}
+function ballenas(vol){var n=Math.max(1,Math.floor(Math.log10(Math.max(vol,1000)/1000)+1));return '🐳'.repeat(Math.min(n,6));}
 async function load(){
   var r=await fetch('/api/feed/signals');
   if(r.status===401){location.reload();return;}
   var data=await r.json();
   if(!data.length){document.getElementById('feed').innerHTML='<div class=loading>Aún no hay señales</div>';return;}
-  var html='';
+  var cont=document.getElementById('feed');
+  cont.innerHTML='';
   data.forEach(function(s){
     var buy=s.side==='b';
-    var emoji=buy?'🟢🐳':'🔴🐳';
-    var pctCls=s.price_diff_pct>=0?'pos':'neg';
-    html+='<div class="msg '+(buy?'buy':'sell')+'">';
-    html+='<div class=msg-head><span class=pair>'+emoji+' '+s.pair+'</span><span class=time>'+fechaHora(s.timestamp)+'</span></div>';
-    html+='<div class="pct '+pctCls+'">'+(s.price_diff_pct>=0?'+':'')+s.price_diff_pct+'%</div>';
-    html+='<div class=detail>💰 <span class=vol>'+fmt(s.volume_eur)+' USD</span><br>💵 Precio: '+s.price_to+'</div>';
-    html+='</div>';
+    var msg=document.createElement('div');
+    msg.className='msg '+(buy?'buy':'sell');
+    // Cabecera: par (enlace CoinGecko) + hora
+    var head=document.createElement('div');head.className='msg-head';
+    var a=document.createElement('a');a.className='pair-link';a.href=s.cmc_url;a.target='_blank';
+    a.textContent=(buy?'🍏':'🍎')+' '+s.pair;
+    var t=document.createElement('span');t.className='time';t.textContent=fechaHora(s.timestamp);
+    head.appendChild(a);head.appendChild(t);
+    msg.appendChild(head);
+    // % movimiento
+    var pct=document.createElement('div');
+    pct.className='pct '+(s.price_diff_pct>=0?'pos':'neg');
+    pct.textContent=(s.price_diff_pct>=0?'+':'')+s.price_diff_pct+'%';
+    msg.appendChild(pct);
+    // Detalle: ballenas + volumen + precio
+    var det=document.createElement('div');det.className='detail';
+    det.innerHTML=ballenas(s.volume_eur)+' <span class=vol>'+fmt(s.volume_eur)+' USD</span><br>💵 Precio: '+s.price_to;
+    if(s.n_ballenas){det.innerHTML+='<br>🔢 Ballenas seguidas: <b>'+s.n_ballenas+'</b>';}
+    msg.appendChild(det);
+    // Score IA (si existe)
+    if(s.score_final!=null){
+      var q=s.score_final>=8?'🟢':s.score_final>=6?'🟡':'🔴';
+      var dir=(s.direccion||'NEUTRAL').toUpperCase();
+      var dirCls=dir==='LONG'?'long':dir==='SHORT'?'short':'neutral';
+      var dirTxt=dir==='LONG'?'🟩 LONG':dir==='SHORT'?'🟥 SHORT':'⬜ NEUTRAL';
+      var sc=document.createElement('div');sc.className='score';
+      var fund=s.score_fund!=null?s.score_fund.toFixed(1):'—';
+      var tec=s.score_tec!=null?s.score_tec.toFixed(1):'—';
+      sc.innerHTML='<div class=score-head>'+q+' Score IA: '+s.score_final+'/10 <span class="dir '+dirCls+'">'+dirTxt+'</span></div>'+
+                   '<div class=resumen>Fund: '+fund+' | Téc: '+tec+'</div>';
+      msg.appendChild(sc);
+    }
+    // Enlace CoinGecko explícito
+    var cmc=document.createElement('a');cmc.className='cmc';cmc.href=s.cmc_url;cmc.target='_blank';
+    cmc.textContent='📊 Ver en CoinGecko';
+    msg.appendChild(cmc);
+    cont.appendChild(msg);
   });
-  document.getElementById('feed').innerHTML=html;
 }
 async function logout(){await fetch('/api/feed/logout',{method:'POST'});location.reload();}
 load();setInterval(load,30000);
@@ -2125,8 +2168,14 @@ def feed_signals():
     token = _rq.cookies.get("feed_token", "")
     if token not in _feed_sessions:
         return jsonify({"error": "no autorizado"}), 401
-    # Mismas señales que se notifican: solo cripto real, más recientes primero
-    rows = db_get("SELECT * FROM signals ORDER BY id DESC LIMIT 100")
+    # Señales unidas con su predicción IA (score, dirección, nº ballenas)
+    rows = db_get("""
+        SELECT s.*,
+               p.score_fund, p.score_tec, p.score_final, p.direccion, p.n_ballenas
+        FROM signals s
+        LEFT JOIN predicciones p ON p.signal_id = s.id
+        ORDER BY s.id DESC LIMIT 100
+    """)
     FIAT_SET = {"USD","EUR","GBP","JPY","CHF","CAD","AUD","NZD","SEK","NOK","DKK","PLN","MXN","SGD","HKD","ZAR","TRY","CZK","HUF"}
     STABLE_SET = {"USDT","USDC","DAI","TUSD","BUSD","USDP","PYUSD","GUSD","EURT","EURC","EURR","XAUT"}
     def cripto_real(pair):
@@ -2135,6 +2184,14 @@ def feed_signals():
         def real(s): return s.upper() not in FIAT_SET and s.upper() not in STABLE_SET
         return real(parts[0]) or real(parts[1])
     filtradas = [r for r in rows if cripto_real(r["pair"])]
+    # Añadir enlace a CoinGecko y ticker 24h por par (con caché)
+    for r in filtradas:
+        token_c = r["pair"].split("/")[0]
+        token_c = "BTC" if token_c == "XBT" else token_c
+        try:
+            r["cmc_url"] = get_cmc_url(token_c)
+        except Exception:
+            r["cmc_url"] = f"https://www.coingecko.com/en/coins/{token_c.lower()}"
     return jsonify(filtradas)
 
 # ══════════════ ADMIN (gestión de usuarios) ══════════════
