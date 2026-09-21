@@ -1312,17 +1312,27 @@ th{color:#848e9c;font-weight:600}
 async function cargar(){
   var r=await fetch('/api/admin/users');var users=await r.json();
   var tb=document.querySelector('#tabla tbody');tb.innerHTML='';
-  if(!users.length){tb.innerHTML='<tr><td colspan=4 style="color:#848e9c;text-align:center">Sin usuarios todavía</td></tr>';return;}
+  if(!users.length){tb.innerHTML='<tr><td colspan=4 style="color:#848e9c;text-align:center">Sin usuarios todavia</td></tr>';return;}
   users.forEach(function(u){
     var fecha=u.created_at?u.created_at.substring(0,10):'-';
-    var tr='<tr><td>'+u.username+'</td>';
-    tr+='<td><span class="badge '+u.estado+'">'+u.estado+'</span></td>';
-    tr+='<td>'+fecha+'</td><td>';
-    if(u.estado==='activo')tr+='<button class="btn-sm" onclick="estado('+u.id+',\'pausado\')">Pausar</button>';
-    else tr+='<button class="btn-sm" onclick="estado('+u.id+',\'activo\')">Activar</button>';
-    tr+='<button class="btn-sm btn-del" onclick="elim('+u.id+',\''+u.username+'\')">Eliminar</button>';
-    tr+='</td></tr>';
-    tb.innerHTML+=tr;
+    var tr=document.createElement('tr');
+    var tdU=document.createElement('td');tdU.textContent=u.username;
+    var tdE=document.createElement('td');tdE.innerHTML='<span class="badge '+u.estado+'">'+u.estado+'</span>';
+    var tdF=document.createElement('td');tdF.textContent=fecha;
+    var tdA=document.createElement('td');
+    var btnEstado=document.createElement('button');
+    btnEstado.className='btn-sm';
+    if(u.estado==='activo'){btnEstado.textContent='Pausar';btnEstado.dataset.estado='pausado';}
+    else{btnEstado.textContent='Activar';btnEstado.dataset.estado='activo';}
+    btnEstado.dataset.id=u.id;
+    btnEstado.addEventListener('click',function(){estado(this.dataset.id,this.dataset.estado);});
+    var btnDel=document.createElement('button');
+    btnDel.className='btn-sm btn-del';btnDel.textContent='Eliminar';
+    btnDel.dataset.id=u.id;btnDel.dataset.nombre=u.username;
+    btnDel.addEventListener('click',function(){elim(this.dataset.id,this.dataset.nombre);});
+    tdA.appendChild(btnEstado);tdA.appendChild(btnDel);
+    tr.appendChild(tdU);tr.appendChild(tdE);tr.appendChild(tdF);tr.appendChild(tdA);
+    tb.appendChild(tr);
   });
 }
 async function crear(){
