@@ -1388,11 +1388,15 @@ function render(){
 }
 function cambiarPagina(d){paginaActual+=d;render();window.scrollTo(0,0);}
 function fmt2(n){if(!n)return '0';if(n>=1e6)return (n/1e6).toFixed(1)+'M';if(n>=1e3)return (n/1e3).toFixed(1)+'K';return Math.round(n);}
+var ultimaFirmaAlertas='';
 async function loadAlertas(){
   try{
     var r=await fetch('/api/feed/alertas');
     if(r.status===401){location.reload();return;}
     var alertas=await r.json();
+    var firmaA=alertas.map(function(a){return a.id;}).join(',');
+    if(firmaA===ultimaFirmaAlertas)return;  // sin cambios, no tocar el DOM
+    ultimaFirmaAlertas=firmaA;
     var cont=document.getElementById('alertas');
     cont.innerHTML='';
     if(!alertas.length)return;
@@ -1422,17 +1426,28 @@ async function loadAlertas(){
     });
   }catch(e){console.log('Error alertas',e);}
 }
-async function load(){
+var ultimaFirma='';
+function firmaDatos(arr){
+  // Firma ligera para detectar si los datos cambiaron (nº de grupos + timestamps + compras)
+  return arr.map(function(s){return s.token+':'+s.compras_7d+':'+s.timestamp;}).join('|');
+}
+async function load(primeraVez){
   var r=await fetch('/api/feed/signals');
   if(r.status===401){location.reload();return;}
-  datos=await r.json();
-  paginaActual=0;
-  render();
+  var nuevos=await r.json();
+  var firma=firmaDatos(nuevos);
+  // Solo re-renderizar si los datos cambiaron (evita el salto de scroll en el refresco)
+  if(firma!==ultimaFirma){
+    datos=nuevos;
+    ultimaFirma=firma;
+    if(primeraVez)paginaActual=0;
+    render();
+  }
   loadAlertas();
 }
 window.addEventListener('resize',render);
 async function logout(){await fetch('/api/feed/logout',{method:'POST'});location.reload();}
-load();setInterval(load,30000);
+load(true);setInterval(function(){load(false);},30000);
 </script>
 </body></html>"""
 
