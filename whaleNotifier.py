@@ -1255,6 +1255,14 @@ header h1{font-size:1.1rem;color:#fcd535}
 .vol{color:#fcd535;font-weight:600}
 .acum{background:rgba(252,213,53,0.08);border:1px solid rgba(252,213,53,0.25);border-radius:8px;padding:0.4rem 0.6rem;margin:0.5rem 0;font-size:0.8rem}
 .acum b{color:#fcd535}
+.acum-toggle{cursor:pointer;user-select:none;display:flex;align-items:center;gap:0.3rem;color:#fcd535;font-size:0.75rem;margin-top:0.4rem;font-weight:600}
+.acum-toggle:hover{text-decoration:underline}
+.acum-detalle{margin-top:0.5rem;border-top:1px solid rgba(252,213,53,0.2);padding-top:0.4rem;display:none}
+.acum-detalle.abierto{display:block}
+.compra-item{display:flex;justify-content:space-between;font-size:0.73rem;color:#b7bdc6;padding:0.25rem 0;border-bottom:1px solid rgba(255,255,255,0.04)}
+.compra-item:last-child{border-bottom:none}
+.compra-item .c-vol{color:#0ecb81;font-weight:600}
+.compra-item .c-fecha{color:#848e9c}
 .score{margin-top:0.6rem;padding-top:0.6rem;border-top:1px solid #2b3139;font-size:0.8rem}
 .score-head{font-weight:700;margin-bottom:0.2rem}
 .dir{display:inline-block;padding:0.12rem 0.45rem;border-radius:4px;font-size:0.68rem;font-weight:700;margin-left:0.3rem}
@@ -1312,10 +1320,32 @@ function crearTarjeta(s){
   pct.className='pct '+(s.price_diff_pct>=0?'pos':'neg');
   pct.textContent=(s.price_diff_pct>=0?'+':'')+s.price_diff_pct+'%';
   msg.appendChild(pct);
-  // Bloque de acumulación 7 días
+  // Bloque de acumulación 7 días (desplegable)
   var ac=document.createElement('div');ac.className='acum';
-  ac.innerHTML='🐳 <b>'+s.compras_7d+'</b> compras de ballena (7d)<br>💰 Acumulado: <b>'+fmt(s.vol_compras_7d)+' USD</b>';
-  if(s.ventas_7d)ac.innerHTML+='<br>📉 '+s.ventas_7d+' ventas';
+  var resumen=document.createElement('div');
+  resumen.innerHTML='🐳 <b>'+s.compras_7d+'</b> compras de ballena (7d)<br>💰 Acumulado: <b>'+fmt(s.vol_compras_7d)+' USD</b>';
+  if(s.ventas_7d)resumen.innerHTML+='<br>📉 '+s.ventas_7d+' ventas';
+  ac.appendChild(resumen);
+  // Detalle desplegable de cada compra
+  if(s.lista_compras && s.lista_compras.length){
+    var toggle=document.createElement('div');toggle.className='acum-toggle';
+    toggle.innerHTML='<span class=flecha>▸</span> Ver detalle de compras ('+s.lista_compras.length+')';
+    var detalle=document.createElement('div');detalle.className='acum-detalle';
+    s.lista_compras.forEach(function(c){
+      var item=document.createElement('div');item.className='compra-item';
+      item.innerHTML='<span class=c-vol>'+fmt(c.volume_eur)+' USD</span><span class=c-fecha>'+fechaHora(c.timestamp)+'</span>';
+      detalle.appendChild(item);
+    });
+    toggle.addEventListener('click',function(){
+      detalle.classList.toggle('abierto');
+      var f=toggle.querySelector('.flecha');
+      var abierto=detalle.classList.contains('abierto');
+      f.textContent=abierto?'▾':'▸';
+      toggle.childNodes[1].textContent=(abierto?' Ocultar detalle de compras (':' Ver detalle de compras (')+s.lista_compras.length+')';
+    });
+    ac.appendChild(toggle);
+    ac.appendChild(detalle);
+  }
   msg.appendChild(ac);
   var det=document.createElement('div');det.className='detail';
   det.innerHTML=ballenas(s.volume_eur)+' última: <span class=vol>'+fmt(s.volume_eur)+' USD</span>';
@@ -2293,11 +2323,17 @@ def feed_signals():
                 "token": token_c, "pair": pair,
                 "compras": 0, "ventas": 0, "vol_compras": 0.0,
                 "ultima": r,  # la más reciente (rows viene DESC, la primera es la última)
+                "lista_compras": [],  # detalle de cada compra de ballena
             }
         g = grupos[token_c]
         if r["side"] == "b":
             g["compras"] += 1
             g["vol_compras"] += (r["volume_eur"] or 0)
+            g["lista_compras"].append({
+                "timestamp": r["timestamp"],
+                "volume_eur": r["volume_eur"] or 0,
+                "price_diff_pct": r["price_diff_pct"],
+            })
         else:
             g["ventas"] += 1
 
@@ -2314,6 +2350,7 @@ def feed_signals():
             "compras_7d": g["compras"],
             "ventas_7d": g["ventas"],
             "vol_compras_7d": g["vol_compras"],
+            "lista_compras": g["lista_compras"],
             "cmc_url": cmc_url,
             # datos de la señal más reciente
             "timestamp": u["timestamp"],
