@@ -134,6 +134,16 @@ def init_db():
             expires_at   TEXT
         )
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS alertas_especiales (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            tipo        TEXT NOT NULL,
+            pair        TEXT NOT NULL,
+            token       TEXT,
+            timestamp   TEXT NOT NULL,
+            datos_json  TEXT
+        )
+    """)
     conn.commit()
     conn.close()
     print(f"BD lista en: {DB_PATH}")
@@ -1228,85 +1238,169 @@ body{background:#0b0e11;color:#eaecef;min-height:100vh}
 header{position:sticky;top:0;background:#181a20;border-bottom:1px solid #2b3139;padding:1rem 1.2rem;display:flex;justify-content:space-between;align-items:center;z-index:10}
 header h1{font-size:1.1rem;color:#fcd535}
 .logout{background:none;border:1px solid #2b3139;color:#848e9c;padding:0.4rem 0.8rem;border-radius:6px;font-size:0.75rem;cursor:pointer}
-.feed{max-width:600px;margin:0 auto;padding:1rem}
-.msg{background:#181a20;border:1px solid #2b3139;border-radius:12px;padding:1rem;margin-bottom:0.8rem;border-left:3px solid #848e9c}
+.wrap{max-width:1200px;margin:0 auto;padding:1rem}
+/* Grid en escritorio, columna en móvil */
+.grid{display:grid;grid-template-columns:1fr;gap:0.8rem}
+@media(min-width:768px){.grid{grid-template-columns:repeat(4,1fr)}}
+.msg{background:#181a20;border:1px solid #2b3139;border-radius:12px;padding:1rem;border-left:3px solid #848e9c;display:flex;flex-direction:column}
 .msg.buy{border-left-color:#0ecb81}
 .msg.sell{border-left-color:#f6465d}
-.msg-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem}
-.pair-link{font-weight:700;font-size:1.05rem;color:#fcd535;text-decoration:none}
+.msg-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;gap:0.4rem}
+.pair-link{font-weight:700;font-size:1rem;color:#fcd535;text-decoration:none}
 .pair-link:hover{text-decoration:underline}
-.time{font-size:0.7rem;color:#848e9c}
-.pct{font-size:1.4rem;font-weight:700;margin:0.3rem 0}
+.time{font-size:0.65rem;color:#848e9c;white-space:nowrap}
+.pct{font-size:1.3rem;font-weight:700;margin:0.2rem 0}
 .pct.pos{color:#0ecb81}.pct.neg{color:#f6465d}
-.detail{font-size:0.85rem;color:#b7bdc6;line-height:1.7}
+.detail{font-size:0.8rem;color:#b7bdc6;line-height:1.7}
 .vol{color:#fcd535;font-weight:600}
-.chg24{font-size:0.8rem;margin-top:0.3rem}
-.chg24.pos{color:#0ecb81}.chg24.neg{color:#f6465d}
-.score{margin-top:0.7rem;padding-top:0.7rem;border-top:1px solid #2b3139;font-size:0.85rem}
-.score-head{font-weight:700;margin-bottom:0.3rem}
-.dir{display:inline-block;padding:0.15rem 0.5rem;border-radius:4px;font-size:0.72rem;font-weight:700;margin-left:0.4rem}
+.acum{background:rgba(252,213,53,0.08);border:1px solid rgba(252,213,53,0.25);border-radius:8px;padding:0.4rem 0.6rem;margin:0.5rem 0;font-size:0.8rem}
+.acum b{color:#fcd535}
+.score{margin-top:0.6rem;padding-top:0.6rem;border-top:1px solid #2b3139;font-size:0.8rem}
+.score-head{font-weight:700;margin-bottom:0.2rem}
+.dir{display:inline-block;padding:0.12rem 0.45rem;border-radius:4px;font-size:0.68rem;font-weight:700;margin-left:0.3rem}
 .dir.long{background:rgba(14,203,129,0.15);color:#0ecb81}
 .dir.short{background:rgba(246,70,93,0.15);color:#f6465d}
 .dir.neutral{background:rgba(132,142,156,0.15);color:#848e9c}
-.resumen{color:#848e9c;font-size:0.78rem;margin-top:0.25rem;line-height:1.5}
-.cmc{display:inline-block;margin-top:0.5rem;font-size:0.75rem;color:#848e9c;text-decoration:none;border:1px solid #2b3139;padding:0.25rem 0.6rem;border-radius:6px}
-.cmc:hover{border-color:#fcd535;color:#fcd535}
-.loading{text-align:center;color:#848e9c;padding:2rem}
+.resumen{color:#848e9c;font-size:0.75rem;margin-top:0.2rem}
+.cmc{display:inline-block;margin-top:auto;padding-top:0.6rem;font-size:0.72rem;color:#848e9c;text-decoration:none}
+.cmc:hover{color:#fcd535}
+.alertas-especiales{margin-bottom:1.2rem}
+.alerta{border-radius:12px;padding:1rem;margin-bottom:0.7rem;border:2px solid}
+.alerta.mega{background:linear-gradient(135deg,rgba(246,70,93,0.12),rgba(252,213,53,0.08));border-color:#f6465d}
+.alerta.acum{background:linear-gradient(135deg,rgba(14,203,129,0.12),rgba(252,213,53,0.08));border-color:#0ecb81}
+.alerta-tipo{font-weight:800;font-size:0.95rem;margin-bottom:0.5rem;letter-spacing:0.02em}
+.alerta.mega .alerta-tipo{color:#f6465d}
+.alerta.acum .alerta-tipo{color:#0ecb81}
+.alerta-body{font-size:0.85rem;line-height:1.7;color:#eaecef}
+.alerta-body b{color:#fcd535}
+.alerta a{color:#fcd535;text-decoration:none;font-weight:700}
+.sec-titulo{font-size:0.8rem;color:#848e9c;text-transform:uppercase;letter-spacing:0.05em;margin:0.5rem 0 0.8rem;font-weight:700}
+.pager{display:flex;justify-content:center;align-items:center;gap:1rem;margin:1.5rem 0}
+.pager button{background:#181a20;border:1px solid #2b3139;color:#eaecef;padding:0.5rem 1rem;border-radius:8px;cursor:pointer;font-size:0.85rem}
+.pager button:hover:not(:disabled){border-color:#fcd535;color:#fcd535}
+.pager button:disabled{opacity:0.35;cursor:default}
+.pager span{color:#848e9c;font-size:0.85rem}
+.loading{text-align:center;color:#848e9c;padding:2rem;grid-column:1/-1}
 </style></head><body>
 <header><h1>🐋 Whale Feed</h1><button class=logout onclick=logout()>Salir</button></header>
-<div class=feed id=feed><div class=loading>Cargando señales...</div></div>
+<div class=wrap>
+<div class=alertas-especiales id=alertas></div>
+<div class=grid id=grid><div class=loading>Cargando señales...</div></div>
+<div class=pager id=pager style=display:none>
+<button id=prev onclick=cambiarPagina(-1)>← Anterior</button>
+<span id=pageinfo></span>
+<button id=next onclick=cambiarPagina(1)>Siguiente →</button>
+</div>
+</div>
 <script>
+var POR_PAGINA=16, paginaActual=0, datos=[];
+function esMovil(){return window.innerWidth<768;}
 function fmt(n){if(!n)return '0';if(n>=1e6)return (n/1e6).toFixed(1)+'M';if(n>=1e3)return (n/1e3).toFixed(1)+'K';return Math.round(n);}
 function fechaHora(ts){var d=new Date(ts.replace(' ','T'));var h=('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2);var hoy=new Date();var df=Math.round((new Date(hoy.getFullYear(),hoy.getMonth(),hoy.getDate())-new Date(d.getFullYear(),d.getMonth(),d.getDate()))/86400000);if(df===0)return 'hoy '+h;if(df===1)return 'ayer '+h;return ('0'+d.getDate()).slice(-2)+'/'+('0'+(d.getMonth()+1)).slice(-2)+' '+h;}
 function ballenas(vol){var n=Math.max(1,Math.floor(Math.log10(Math.max(vol,1000)/1000)+1));return '🐳'.repeat(Math.min(n,6));}
+function crearTarjeta(s){
+  var buy=s.side==='b';
+  var msg=document.createElement('div');
+  msg.className='msg '+(buy?'buy':'sell');
+  var head=document.createElement('div');head.className='msg-head';
+  var a=document.createElement('a');a.className='pair-link';a.href=s.cmc_url;a.target='_blank';
+  a.textContent=(buy?'🍏':'🍎')+' '+s.token;
+  var t=document.createElement('span');t.className='time';t.textContent=fechaHora(s.timestamp);
+  head.appendChild(a);head.appendChild(t);
+  msg.appendChild(head);
+  var pct=document.createElement('div');
+  pct.className='pct '+(s.price_diff_pct>=0?'pos':'neg');
+  pct.textContent=(s.price_diff_pct>=0?'+':'')+s.price_diff_pct+'%';
+  msg.appendChild(pct);
+  // Bloque de acumulación 7 días
+  var ac=document.createElement('div');ac.className='acum';
+  ac.innerHTML='🐳 <b>'+s.compras_7d+'</b> compras de ballena (7d)<br>💰 Acumulado: <b>'+fmt(s.vol_compras_7d)+' USD</b>';
+  if(s.ventas_7d)ac.innerHTML+='<br>📉 '+s.ventas_7d+' ventas';
+  msg.appendChild(ac);
+  var det=document.createElement('div');det.className='detail';
+  det.innerHTML=ballenas(s.volume_eur)+' última: <span class=vol>'+fmt(s.volume_eur)+' USD</span>';
+  msg.appendChild(det);
+  if(s.score_final!=null){
+    var q=s.score_final>=8?'🟢':s.score_final>=6?'🟡':'🔴';
+    var dir=(s.direccion||'NEUTRAL').toUpperCase();
+    var dirCls=dir==='LONG'?'long':dir==='SHORT'?'short':'neutral';
+    var dirTxt=dir==='LONG'?'🟩 LONG':dir==='SHORT'?'🟥 SHORT':'⬜ NEUTRAL';
+    var sc=document.createElement('div');sc.className='score';
+    var fund=s.score_fund!=null?s.score_fund.toFixed(1):'—';
+    var tec=s.score_tec!=null?s.score_tec.toFixed(1):'—';
+    sc.innerHTML='<div class=score-head>'+q+' Score IA: '+s.score_final+'/10 <span class="dir '+dirCls+'">'+dirTxt+'</span></div>'+
+                 '<div class=resumen>Fund: '+fund+' | Téc: '+tec+'</div>';
+    msg.appendChild(sc);
+  }
+  var cmc=document.createElement('a');cmc.className='cmc';cmc.href=s.cmc_url;cmc.target='_blank';
+  cmc.textContent='📊 Ver en CoinGecko';
+  msg.appendChild(cmc);
+  return msg;
+}
+function render(){
+  var grid=document.getElementById('grid');grid.innerHTML='';
+  if(!datos.length){grid.innerHTML='<div class=loading>Aún no hay señales</div>';document.getElementById('pager').style.display='none';return;}
+  var lista, pager=document.getElementById('pager');
+  if(esMovil()){
+    lista=datos; pager.style.display='none';  // móvil: todo tipo feed, sin paginador
+  }else{
+    var ini=paginaActual*POR_PAGINA;
+    lista=datos.slice(ini,ini+POR_PAGINA);
+    var totalPag=Math.ceil(datos.length/POR_PAGINA);
+    if(totalPag>1){
+      pager.style.display='flex';
+      document.getElementById('pageinfo').textContent='Página '+(paginaActual+1)+' de '+totalPag;
+      document.getElementById('prev').disabled=paginaActual===0;
+      document.getElementById('next').disabled=paginaActual>=totalPag-1;
+    }else{pager.style.display='none';}
+  }
+  lista.forEach(function(s){grid.appendChild(crearTarjeta(s));});
+}
+function cambiarPagina(d){paginaActual+=d;render();window.scrollTo(0,0);}
+function fmt2(n){if(!n)return '0';if(n>=1e6)return (n/1e6).toFixed(1)+'M';if(n>=1e3)return (n/1e3).toFixed(1)+'K';return Math.round(n);}
+async function loadAlertas(){
+  try{
+    var r=await fetch('/api/feed/alertas');
+    if(r.status===401){location.reload();return;}
+    var alertas=await r.json();
+    var cont=document.getElementById('alertas');
+    cont.innerHTML='';
+    if(!alertas.length)return;
+    var titulo=document.createElement('div');titulo.className='sec-titulo';titulo.textContent='🔔 Alertas destacadas';
+    cont.appendChild(titulo);
+    alertas.forEach(function(a){
+      var d=a.datos||{};
+      var div=document.createElement('div');
+      if(a.tipo==='mega_ballena'){
+        div.className='alerta mega';
+        div.innerHTML='<div class=alerta-tipo>🚨🐋 MEGA BALLENA</div>'+
+          '<div class=alerta-body><b>'+(d.lado||'')+' GIGANTE</b> en '+a.token+'<br>'+
+          '💰 Importe: <b>'+fmt2(d.usd)+' USD</b><br>'+
+          '📊 24h: '+(d.chg_str||'?')+' · '+fechaHora(a.timestamp)+'<br>'+
+          '<a href="'+a.cmc_url+'" target="_blank">📊 Ver en CoinGecko</a></div>';
+      }else if(a.tipo==='acumulacion'){
+        div.className='alerta acum';
+        div.innerHTML='<div class=alerta-tipo>🟢📈 ACUMULACIÓN DETECTADA</div>'+
+          '<div class=alerta-body><b>'+a.token+'</b> — patrón pre-subida<br>'+
+          '🐳 <b>'+(d.n_compra||0)+'</b> ballenas comprando vs '+(d.n_venta||0)+' vendiendo (ratio '+(d.ratio||'?')+':1)<br>'+
+          '💰 Volumen: <b>'+fmt2(d.vol_compra)+' USD</b><br>'+
+          '📉 Precio aún plano: '+(d.subida_actual!=null?d.subida_actual+'%':'?')+' · 🏷 '+(d.mcap_str||'?')+'<br>'+
+          '<span style="color:#848e9c;font-size:0.78rem">'+fechaHora(a.timestamp)+'</span><br>'+
+          '<a href="'+a.cmc_url+'" target="_blank">📊 Ver en CoinGecko</a></div>';
+      }
+      cont.appendChild(div);
+    });
+  }catch(e){console.log('Error alertas',e);}
+}
 async function load(){
   var r=await fetch('/api/feed/signals');
   if(r.status===401){location.reload();return;}
-  var data=await r.json();
-  if(!data.length){document.getElementById('feed').innerHTML='<div class=loading>Aún no hay señales</div>';return;}
-  var cont=document.getElementById('feed');
-  cont.innerHTML='';
-  data.forEach(function(s){
-    var buy=s.side==='b';
-    var msg=document.createElement('div');
-    msg.className='msg '+(buy?'buy':'sell');
-    // Cabecera: par (enlace CoinGecko) + hora
-    var head=document.createElement('div');head.className='msg-head';
-    var a=document.createElement('a');a.className='pair-link';a.href=s.cmc_url;a.target='_blank';
-    a.textContent=(buy?'🍏':'🍎')+' '+s.pair;
-    var t=document.createElement('span');t.className='time';t.textContent=fechaHora(s.timestamp);
-    head.appendChild(a);head.appendChild(t);
-    msg.appendChild(head);
-    // % movimiento
-    var pct=document.createElement('div');
-    pct.className='pct '+(s.price_diff_pct>=0?'pos':'neg');
-    pct.textContent=(s.price_diff_pct>=0?'+':'')+s.price_diff_pct+'%';
-    msg.appendChild(pct);
-    // Detalle: ballenas + volumen + precio
-    var det=document.createElement('div');det.className='detail';
-    det.innerHTML=ballenas(s.volume_eur)+' <span class=vol>'+fmt(s.volume_eur)+' USD</span><br>💵 Precio: '+s.price_to;
-    if(s.n_ballenas){det.innerHTML+='<br>🔢 Ballenas seguidas: <b>'+s.n_ballenas+'</b>';}
-    msg.appendChild(det);
-    // Score IA (si existe)
-    if(s.score_final!=null){
-      var q=s.score_final>=8?'🟢':s.score_final>=6?'🟡':'🔴';
-      var dir=(s.direccion||'NEUTRAL').toUpperCase();
-      var dirCls=dir==='LONG'?'long':dir==='SHORT'?'short':'neutral';
-      var dirTxt=dir==='LONG'?'🟩 LONG':dir==='SHORT'?'🟥 SHORT':'⬜ NEUTRAL';
-      var sc=document.createElement('div');sc.className='score';
-      var fund=s.score_fund!=null?s.score_fund.toFixed(1):'—';
-      var tec=s.score_tec!=null?s.score_tec.toFixed(1):'—';
-      sc.innerHTML='<div class=score-head>'+q+' Score IA: '+s.score_final+'/10 <span class="dir '+dirCls+'">'+dirTxt+'</span></div>'+
-                   '<div class=resumen>Fund: '+fund+' | Téc: '+tec+'</div>';
-      msg.appendChild(sc);
-    }
-    // Enlace CoinGecko explícito
-    var cmc=document.createElement('a');cmc.className='cmc';cmc.href=s.cmc_url;cmc.target='_blank';
-    cmc.textContent='📊 Ver en CoinGecko';
-    msg.appendChild(cmc);
-    cont.appendChild(msg);
-  });
+  datos=await r.json();
+  paginaActual=0;
+  render();
+  loadAlertas();
 }
+window.addEventListener('resize',render);
 async function logout(){await fetch('/api/feed/logout',{method:'POST'});location.reload();}
 load();setInterval(load,30000);
 </script>
@@ -2165,17 +2259,20 @@ def feed_logout():
 @app.route('/api/feed/signals')
 def feed_signals():
     from flask import request as _rq
+    from datetime import datetime, timedelta
     token = _rq.cookies.get("feed_token", "")
     if token not in _feed_sessions:
         return jsonify({"error": "no autorizado"}), 401
-    # Señales unidas con su predicción IA (score, dirección, nº ballenas)
+    # Señales de los últimos 7 días unidas con su predicción IA
+    desde = (datetime.utcnow() - timedelta(days=7)).isoformat()
     rows = db_get("""
         SELECT s.*,
                p.score_fund, p.score_tec, p.score_final, p.direccion, p.n_ballenas
         FROM signals s
         LEFT JOIN predicciones p ON p.signal_id = s.id
-        ORDER BY s.id DESC LIMIT 100
-    """)
+        WHERE s.timestamp >= ?
+        ORDER BY s.id DESC LIMIT 500
+    """, (desde,))
     FIAT_SET = {"USD","EUR","GBP","JPY","CHF","CAD","AUD","NZD","SEK","NOK","DKK","PLN","MXN","SGD","HKD","ZAR","TRY","CZK","HUF"}
     STABLE_SET = {"USDT","USDC","DAI","TUSD","BUSD","USDP","PYUSD","GUSD","EURT","EURC","EURR","XAUT"}
     def cripto_real(pair):
@@ -2184,15 +2281,73 @@ def feed_signals():
         def real(s): return s.upper() not in FIAT_SET and s.upper() not in STABLE_SET
         return real(parts[0]) or real(parts[1])
     filtradas = [r for r in rows if cripto_real(r["pair"])]
-    # Añadir enlace a CoinGecko y ticker 24h por par (con caché)
+
+    # Agrupar por moneda (token base). Una tarjeta por moneda con datos acumulados 7d.
+    grupos = {}
     for r in filtradas:
-        token_c = r["pair"].split("/")[0]
+        pair = r["pair"]
+        token_c = pair.split("/")[0]
         token_c = "BTC" if token_c == "XBT" else token_c
+        if token_c not in grupos:
+            grupos[token_c] = {
+                "token": token_c, "pair": pair,
+                "compras": 0, "ventas": 0, "vol_compras": 0.0,
+                "ultima": r,  # la más reciente (rows viene DESC, la primera es la última)
+            }
+        g = grupos[token_c]
+        if r["side"] == "b":
+            g["compras"] += 1
+            g["vol_compras"] += (r["volume_eur"] or 0)
+        else:
+            g["ventas"] += 1
+
+    resultado = []
+    for token_c, g in grupos.items():
+        u = g["ultima"]
         try:
-            r["cmc_url"] = get_cmc_url(token_c)
+            cmc_url = get_cmc_url(token_c)
         except Exception:
-            r["cmc_url"] = f"https://www.coingecko.com/en/coins/{token_c.lower()}"
-    return jsonify(filtradas)
+            cmc_url = f"https://www.coingecko.com/en/coins/{token_c.lower()}"
+        resultado.append({
+            "token": token_c,
+            "pair": g["pair"],
+            "compras_7d": g["compras"],
+            "ventas_7d": g["ventas"],
+            "vol_compras_7d": g["vol_compras"],
+            "cmc_url": cmc_url,
+            # datos de la señal más reciente
+            "timestamp": u["timestamp"],
+            "side": u["side"],
+            "price_diff_pct": u["price_diff_pct"],
+            "volume_eur": u["volume_eur"],
+            "score_final": u["score_final"],
+            "score_fund": u["score_fund"],
+            "score_tec": u["score_tec"],
+            "direccion": u["direccion"],
+            "n_ballenas": u["n_ballenas"],
+        })
+    # Ordenar por señal más reciente
+    resultado.sort(key=lambda x: x["timestamp"], reverse=True)
+    return jsonify(resultado)
+
+@app.route('/api/feed/alertas')
+def feed_alertas():
+    from flask import request as _rq
+    import json as _json
+    token = _rq.cookies.get("feed_token", "")
+    if token not in _feed_sessions:
+        return jsonify({"error": "no autorizado"}), 401
+    rows = db_get("SELECT * FROM alertas_especiales ORDER BY id DESC LIMIT 50")
+    for r in rows:
+        try:
+            r["datos"] = _json.loads(r["datos_json"]) if r["datos_json"] else {}
+        except Exception:
+            r["datos"] = {}
+        try:
+            r["cmc_url"] = get_cmc_url(r["token"])
+        except Exception:
+            r["cmc_url"] = f"https://www.coingecko.com/en/coins/{(r['token'] or '').lower()}"
+    return jsonify(rows)
 
 # ══════════════ ADMIN (gestión de usuarios) ══════════════
 @app.route('/admin')
@@ -2981,6 +3136,27 @@ def detectar_acumulacion(pair):
         return None
 
 
+def guardar_alerta_especial(tipo, pair, datos_dict):
+    """Guarda una alerta especial (mega_ballena / acumulacion) para mostrarla en el feed."""
+    import json as _json
+    from datetime import datetime
+    try:
+        token = pair.split("/")[0]
+        token = "BTC" if token == "XBT" else token
+        with db_lock:
+            conn = sqlite3.connect(DB_PATH, timeout=10)
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("INSERT INTO alertas_especiales (tipo, pair, token, timestamp, datos_json) VALUES (?,?,?,?,?)",
+                         (tipo, pair, token, datetime.utcnow().isoformat(), _json.dumps(datos_dict)))
+            # Limpiar alertas de más de 7 días
+            from datetime import timedelta
+            corte = (datetime.utcnow() - timedelta(days=7)).isoformat()
+            conn.execute("DELETE FROM alertas_especiales WHERE timestamp < ?", (corte,))
+            conn.commit(); conn.close()
+    except Exception as e:
+        print(f"Error guardar_alerta_especial: {e}")
+
+
 def alerta_acumulacion(pair, datos, ticker):
     """Notificación destacada de acumulación de ballenas (patrón pre-pump tipo AKE)."""
     import time as _t
@@ -3015,6 +3191,14 @@ def alerta_acumulacion(pair, datos, ticker):
     except Exception as e:
         print(f"⚠️ Error alerta acumulación: {e}")
 
+    # Guardar para el feed
+    guardar_alerta_especial("acumulacion", pair, {
+        "n_compra": datos["n_compra"], "n_venta": datos["n_venta"],
+        "ratio": datos["ratio"], "vol_compra": datos["vol_compra"],
+        "subida_actual": datos["subida_actual"], "mcap_str": mcap_str,
+        "chg_str": chg_str
+    })
+
     # SMS también
     sms = f"ACUMULACION {pair}: {datos['n_compra']} ballenas comprando (ratio {datos['ratio']}:1), precio plano {datos['subida_actual']:+.1f}%, mcap {mcap_str}"
     enviar_sms(sms)
@@ -3046,6 +3230,12 @@ def alerta_mega_ballena(pair, side, usd, precio, ticker):
         print(f"🚨 Alerta mega-ballena enviada: {pair} {usd:,.0f}USD")
     except Exception as e:
         print(f"⚠️ Error alerta TG mega: {e}")
+
+    # Guardar para el feed
+    guardar_alerta_especial("mega_ballena", pair, {
+        "lado": lado, "usd": usd, "precio": precio,
+        "chg_str": chg_str, "vol_str": vol_str
+    })
 
     # SMS con los datos de la moneda
     sms = f"MEGA BALLENA {lado} {pair}: {anotateVolume(usd)}USD @ {precio} | 24h {chg_str} | Vol {vol_str}"
