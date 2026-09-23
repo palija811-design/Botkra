@@ -1283,6 +1283,13 @@ header h1{font-size:1.1rem;color:#fcd535}
 .alerta-body b{color:#fcd535}
 .alerta a{color:#fcd535;text-decoration:none;font-weight:700}
 .sec-titulo{font-size:0.8rem;color:#848e9c;text-transform:uppercase;letter-spacing:0.05em;margin:0.5rem 0 0.8rem;font-weight:700}
+.sentimiento{margin:0.3rem 0 0.5rem;display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap}
+.fuerza{font-size:0.7rem;color:#848e9c}
+.msg.alerta-mega{border:2px solid #f6465d;background:linear-gradient(135deg,rgba(246,70,93,0.12),rgba(252,213,53,0.06))}
+.msg.alerta-acum{border:2px solid #0ecb81;background:linear-gradient(135deg,rgba(14,203,129,0.12),rgba(252,213,53,0.06))}
+.alerta-badge{font-weight:800;font-size:0.9rem;margin-bottom:0.4rem}
+.alerta-mega .alerta-badge{color:#f6465d}
+.alerta-acum .alerta-badge{color:#0ecb81}
 .pager{display:flex;justify-content:center;align-items:center;gap:1rem;margin:1.5rem 0}
 .pager button{background:#181a20;border:1px solid #2b3139;color:#eaecef;padding:0.5rem 1rem;border-radius:8px;cursor:pointer;font-size:0.85rem}
 .pager button:hover:not(:disabled){border-color:#fcd535;color:#fcd535}
@@ -1292,7 +1299,6 @@ header h1{font-size:1.1rem;color:#fcd535}
 </style></head><body>
 <header><h1>🐋 Whale Feed</h1><button class=logout onclick=logout()>Salir</button></header>
 <div class=wrap>
-<div class=alertas-especiales id=alertas></div>
 <div class=grid id=grid><div class=loading>Cargando señales...</div></div>
 <div class=pager id=pager style=display:none>
 <button id=prev onclick=cambiarPagina(-1)>← Anterior</button>
@@ -1320,6 +1326,15 @@ function crearTarjeta(s){
   pct.className='pct '+(s.price_diff_pct>=0?'pos':'neg');
   pct.textContent=(s.price_diff_pct>=0?'+':'')+s.price_diff_pct+'%';
   msg.appendChild(pct);
+  // Dirección de sentimiento a favor de las ballenas (balance compras/ventas 7d)
+  if(s.sentimiento){
+    var sent=document.createElement('div');
+    var sc=s.sentimiento==='LONG'?'long':s.sentimiento==='SHORT'?'short':'neutral';
+    var st=s.sentimiento==='LONG'?'🟩 LONG (a favor: comprar)':s.sentimiento==='SHORT'?'🟥 SHORT (a favor: vender)':'⬜ NEUTRAL (sin sesgo)';
+    sent.className='sentimiento';
+    sent.innerHTML='<span class="dir '+sc+'">'+st+'</span> <span class=fuerza>fuerza '+s.fuerza+'%</span>';
+    msg.appendChild(sent);
+  }
   // Bloque de acumulación 7 días (desplegable)
   var ac=document.createElement('div');ac.className='acum';
   var resumen=document.createElement('div');
@@ -1367,6 +1382,35 @@ function crearTarjeta(s){
   msg.appendChild(cmc);
   return msg;
 }
+function crearAlerta(a){
+  var d=a.datos||{};
+  var msg=document.createElement('div');
+  if(a.tipo_alerta==='mega_ballena'){
+    msg.className='msg alerta-mega';
+    msg.innerHTML='<div class=alerta-badge>🚨🐋 MEGA BALLENA</div>';
+    var body=document.createElement('div');body.className='detail';
+    body.innerHTML='<b>'+(d.lado||'')+' GIGANTE</b> en '+a.token+'<br>'+
+      '💰 <span class=vol>'+fmt(d.usd)+' USD</span><br>'+
+      '📊 24h: '+(d.chg_str||'?')+'<br>'+
+      '<span class=time>'+fechaHora(a.timestamp)+'</span>';
+    msg.appendChild(body);
+  }else{
+    msg.className='msg alerta-acum';
+    msg.innerHTML='<div class=alerta-badge>🟢📈 ACUMULACIÓN</div>';
+    var body=document.createElement('div');body.className='detail';
+    body.innerHTML='<b>'+a.token+'</b> — patrón pre-subida<br>'+
+      '🐳 <b>'+(d.n_compra||0)+'</b> comprando vs '+(d.n_venta||0)+' vendiendo (ratio '+(d.ratio||'?')+':1)<br>'+
+      '💰 <span class=vol>'+fmt(d.vol_compra)+' USD</span><br>'+
+      '📉 Precio plano: '+(d.subida_actual!=null?d.subida_actual+'%':'?')+' · 🏷 '+(d.mcap_str||'?')+'<br>'+
+      '<span class=time>'+fechaHora(a.timestamp)+'</span>';
+    msg.appendChild(body);
+  }
+  var cmc=document.createElement('a');cmc.className='cmc';cmc.href=a.cmc_url;cmc.target='_blank';
+  cmc.textContent='📊 Ver en CoinGecko';
+  msg.appendChild(cmc);
+  return msg;
+}
+function pintar(item){return item.es_alerta?crearAlerta(item):crearTarjeta(item);}
 function render(){
   var grid=document.getElementById('grid');grid.innerHTML='';
   if(!datos.length){grid.innerHTML='<div class=loading>Aún no hay señales</div>';document.getElementById('pager').style.display='none';return;}
@@ -1384,7 +1428,7 @@ function render(){
       document.getElementById('next').disabled=paginaActual>=totalPag-1;
     }else{pager.style.display='none';}
   }
-  lista.forEach(function(s){grid.appendChild(crearTarjeta(s));});
+  lista.forEach(function(s){grid.appendChild(pintar(s));});
 }
 function cambiarPagina(d){paginaActual+=d;render();window.scrollTo(0,0);}
 function fmt2(n){if(!n)return '0';if(n>=1e6)return (n/1e6).toFixed(1)+'M';if(n>=1e3)return (n/1e3).toFixed(1)+'K';return Math.round(n);}
@@ -1428,8 +1472,8 @@ async function loadAlertas(){
 }
 var ultimaFirma='';
 function firmaDatos(arr){
-  // Firma ligera para detectar si los datos cambiaron (nº de grupos + timestamps + compras)
-  return arr.map(function(s){return s.token+':'+s.compras_7d+':'+s.timestamp;}).join('|');
+  // Firma ligera para detectar si los datos cambiaron
+  return arr.map(function(s){return (s.es_alerta?'A'+s.tipo_alerta:s.token+':'+s.compras_7d)+':'+s.timestamp;}).join('|');
 }
 async function load(primeraVez){
   var r=await fetch('/api/feed/signals');
@@ -1443,7 +1487,6 @@ async function load(primeraVez){
     if(primeraVez)paginaActual=0;
     render();
   }
-  loadAlertas();
 }
 window.addEventListener('resize',render);
 async function logout(){await fetch('/api/feed/logout',{method:'POST'});location.reload();}
@@ -2359,6 +2402,20 @@ def feed_signals():
             cmc_url = get_cmc_url(token_c)
         except Exception:
             cmc_url = f"https://www.coingecko.com/en/coins/{token_c.lower()}"
+        # Dirección de sentimiento a FAVOR de las ballenas (balance compras/ventas 7d)
+        nc, nv = g["compras"], g["ventas"]
+        if nc >= nv * 1.5 and nc > 0:
+            sentimiento = "LONG"          # ballenas comprando → entrar a favor
+        elif nv >= nc * 1.5 and nv > 0:
+            sentimiento = "SHORT"         # ballenas vendiendo → corto a favor
+        else:
+            sentimiento = "NEUTRAL"       # equilibrado, sin sesgo claro
+        # Fuerza del sentimiento (0-100) según cuán dominante es el lado mayoritario
+        total_ops = nc + nv
+        if total_ops > 0:
+            fuerza = round(max(nc, nv) / total_ops * 100)
+        else:
+            fuerza = 0
         resultado.append({
             "token": token_c,
             "pair": g["pair"],
@@ -2366,6 +2423,8 @@ def feed_signals():
             "ventas_7d": g["ventas"],
             "vol_compras_7d": g["vol_compras"],
             "lista_compras": g["lista_compras"],
+            "sentimiento": sentimiento,
+            "fuerza": fuerza,
             "cmc_url": cmc_url,
             # datos de la señal más reciente
             "timestamp": u["timestamp"],
@@ -2378,7 +2437,30 @@ def feed_signals():
             "direccion": u["direccion"],
             "n_ballenas": u["n_ballenas"],
         })
-    # Ordenar por señal más reciente
+
+    # Añadir las alertas especiales (mega-ballena / acumulación) como elementos del feed
+    import json as _json
+    alertas = db_get("SELECT * FROM alertas_especiales WHERE timestamp >= ? ORDER BY id DESC LIMIT 50", (desde,))
+    for a in alertas:
+        try:
+            datos_a = _json.loads(a["datos_json"]) if a["datos_json"] else {}
+        except Exception:
+            datos_a = {}
+        try:
+            cmc_a = get_cmc_url(a["token"])
+        except Exception:
+            cmc_a = f"https://www.coingecko.com/en/coins/{(a['token'] or '').lower()}"
+        resultado.append({
+            "es_alerta": True,
+            "tipo_alerta": a["tipo"],       # "mega_ballena" | "acumulacion"
+            "token": a["token"],
+            "pair": a["pair"],
+            "timestamp": a["timestamp"],
+            "datos": datos_a,
+            "cmc_url": cmc_a,
+        })
+
+    # Ordenar todo (señales + alertas) por fecha, más reciente primero
     resultado.sort(key=lambda x: x["timestamp"], reverse=True)
     return jsonify(resultado)
 
