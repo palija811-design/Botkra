@@ -1259,9 +1259,12 @@ header h1{font-size:1.1rem;color:#fcd535}
 .acum-toggle:hover{text-decoration:underline}
 .acum-detalle{margin-top:0.5rem;border-top:1px solid rgba(252,213,53,0.2);padding-top:0.4rem;display:none}
 .acum-detalle.abierto{display:block}
-.compra-item{display:flex;justify-content:space-between;font-size:0.73rem;color:#b7bdc6;padding:0.25rem 0;border-bottom:1px solid rgba(255,255,255,0.04)}
+.compra-item{display:flex;justify-content:space-between;align-items:center;gap:0.4rem;font-size:0.73rem;color:#b7bdc6;padding:0.25rem 0;border-bottom:1px solid rgba(255,255,255,0.04)}
 .compra-item:last-child{border-bottom:none}
 .compra-item .c-vol{color:#0ecb81;font-weight:600}
+.compra-item .c-vol-sell{color:#f6465d;font-weight:600}
+.compra-item .op-buy{color:#0ecb81;font-size:0.7rem}
+.compra-item .op-sell{color:#f6465d;font-size:0.7rem}
 .compra-item .c-fecha{color:#848e9c}
 .score{margin-top:0.6rem;padding-top:0.6rem;border-top:1px solid #2b3139;font-size:0.8rem}
 .score-head{font-weight:700;margin-bottom:0.2rem}
@@ -1341,14 +1344,17 @@ function crearTarjeta(s){
   resumen.innerHTML='🐳 <b>'+s.compras_7d+'</b> compras de ballena (7d)<br>💰 Acumulado: <b>'+fmt(s.vol_compras_7d)+' USD</b>';
   if(s.ventas_7d)resumen.innerHTML+='<br>📉 '+s.ventas_7d+' ventas';
   ac.appendChild(resumen);
-  // Detalle desplegable de cada compra
-  if(s.lista_compras && s.lista_compras.length){
+  // Detalle desplegable de cada operación (compras y ventas)
+  if(s.lista_ops && s.lista_ops.length){
     var toggle=document.createElement('div');toggle.className='acum-toggle';
-    toggle.innerHTML='<span class=flecha>▸</span> Ver detalle de compras ('+s.lista_compras.length+')';
+    toggle.innerHTML='<span class=flecha>▸</span> Ver detalle de operaciones ('+s.lista_ops.length+')';
     var detalle=document.createElement('div');detalle.className='acum-detalle';
-    s.lista_compras.forEach(function(c){
+    s.lista_ops.forEach(function(c){
+      var esCompra=c.side==='b';
       var item=document.createElement('div');item.className='compra-item';
-      item.innerHTML='<span class=c-vol>'+fmt(c.volume_eur)+' USD</span><span class=c-fecha>'+fechaHora(c.timestamp)+'</span>';
+      var etiqueta=esCompra?'<span class=op-buy>🟢 Compra</span>':'<span class=op-sell>🔴 Venta</span>';
+      var volCls=esCompra?'c-vol':'c-vol-sell';
+      item.innerHTML=etiqueta+'<span class="'+volCls+'">'+fmt(c.volume_eur)+' USD</span><span class=c-fecha>'+fechaHora(c.timestamp)+'</span>';
       detalle.appendChild(item);
     });
     toggle.addEventListener('click',function(){
@@ -1356,7 +1362,7 @@ function crearTarjeta(s){
       var f=toggle.querySelector('.flecha');
       var abierto=detalle.classList.contains('abierto');
       f.textContent=abierto?'▾':'▸';
-      toggle.childNodes[1].textContent=(abierto?' Ocultar detalle de compras (':' Ver detalle de compras (')+s.lista_compras.length+')';
+      toggle.childNodes[1].textContent=(abierto?' Ocultar detalle de operaciones (':' Ver detalle de operaciones (')+s.lista_ops.length+')';
     });
     ac.appendChild(toggle);
     ac.appendChild(detalle);
@@ -2379,21 +2385,23 @@ def feed_signals():
         if token_c not in grupos:
             grupos[token_c] = {
                 "token": token_c, "pair": pair,
-                "compras": 0, "ventas": 0, "vol_compras": 0.0,
+                "compras": 0, "ventas": 0, "vol_compras": 0.0, "vol_ventas": 0.0,
                 "ultima": r,  # la más reciente (rows viene DESC, la primera es la última)
-                "lista_compras": [],  # detalle de cada compra de ballena
+                "lista_ops": [],  # detalle de cada operación de ballena (compra o venta)
             }
         g = grupos[token_c]
         if r["side"] == "b":
             g["compras"] += 1
             g["vol_compras"] += (r["volume_eur"] or 0)
-            g["lista_compras"].append({
-                "timestamp": r["timestamp"],
-                "volume_eur": r["volume_eur"] or 0,
-                "price_diff_pct": r["price_diff_pct"],
-            })
         else:
             g["ventas"] += 1
+            g["vol_ventas"] += (r["volume_eur"] or 0)
+        g["lista_ops"].append({
+            "timestamp": r["timestamp"],
+            "volume_eur": r["volume_eur"] or 0,
+            "price_diff_pct": r["price_diff_pct"],
+            "side": r["side"],
+        })
 
     resultado = []
     for token_c, g in grupos.items():
@@ -2422,7 +2430,8 @@ def feed_signals():
             "compras_7d": g["compras"],
             "ventas_7d": g["ventas"],
             "vol_compras_7d": g["vol_compras"],
-            "lista_compras": g["lista_compras"],
+            "lista_ops": g["lista_ops"],
+            "vol_ventas_7d": g["vol_ventas"],
             "sentimiento": sentimiento,
             "fuerza": fuerza,
             "cmc_url": cmc_url,
@@ -2658,7 +2667,7 @@ def _api_analizar_inner():
             'avg_diff': round(sum(diffs)/len(diffs), 2),
             'total_vol': round(sum(vols), 0),
             'last_signal': t_last,
-            'signals': sigs,
+            'signals': list(reversed(sigs)),  # más recientes primero dentro de la tarjeta
             'change_7d': c7d,
             'cmc_url': cmc,
             'ai_score': ai_score_final,
