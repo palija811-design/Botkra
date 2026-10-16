@@ -40,6 +40,12 @@ HTTPSMS_API_KEY = os.getenv("HTTPSMS_API_KEY", "uk_5fp9LuMMkaBFiWXY6tJWHVRKKLzFF
 HTTPSMS_FROM    = os.getenv("HTTPSMS_FROM", "+34667288899")
 HTTPSMS_TO      = os.getenv("HTTPSMS_TO", "+34693800942,+34638490822")
 MEGA_BALLENA_USD = 100000   # umbral compra gigante para alerta extra + SMS
+# ── Llamada de alerta vía MacroDroid (webhook) ──
+MACRODROID_WEBHOOK = os.getenv("MACRODROID_WEBHOOK", "https://trigger.macrodroid.com/63f9398b-2caf-4f00-8b61-6aca389ea939/llamada")
+# ── Ráfaga: N señales de una misma moneda en una ventana → llamada ──
+RAFAGA_FEED_COUNT = 3        # nº de señales para disparar la ráfaga
+RAFAGA_FEED_HORAS = 24       # ventana en horas
+RAFAGA_FEED_COOLDOWN_H = 6   # no repetir ráfaga del mismo par en X horas
 # ── Alerta de ACUMULACIÓN (patrón que precedió al x24 de AKE) ──
 ACUM_RATIO_MIN     = 2.0    # ratio compras/ventas mínimo (ballenas comprando el doble)
 ACUM_MIN_COMPRAS   = 8      # nº mínimo de ballenas distintas comprando
@@ -131,7 +137,13 @@ def init_db():
             password_hash TEXT NOT NULL,
             estado       TEXT NOT NULL DEFAULT 'activo',
             created_at   TEXT NOT NULL,
-            expires_at   TEXT
+            expires_at   TEXT,
+            telefono     TEXT,
+            telefono_verificado INTEGER DEFAULT 0,
+            llamadas_activas INTEGER DEFAULT 0,
+            avisar_acumulacion INTEGER DEFAULT 1,
+            avisar_megaballena INTEGER DEFAULT 1,
+            avisar_rafaga INTEGER DEFAULT 1
         )
     """)
     conn.execute("""
@@ -144,6 +156,12 @@ def init_db():
             datos_json  TEXT
         )
     """)
+    # Migración: añadir columnas de teléfono si la BD es antigua
+    for _col, _def in [("telefono","TEXT"),("telefono_verificado","INTEGER DEFAULT 0"),("llamadas_activas","INTEGER DEFAULT 0"),("avisar_acumulacion","INTEGER DEFAULT 1"),("avisar_megaballena","INTEGER DEFAULT 1"),("avisar_rafaga","INTEGER DEFAULT 1")]:
+        try:
+            conn.execute(f"ALTER TABLE feed_users ADD COLUMN {_col} {_def}")
+        except Exception:
+            pass
     conn.commit()
     conn.close()
     print(f"BD lista en: {DB_PATH}")
@@ -1299,8 +1317,89 @@ header h1{font-size:1.1rem;color:#fcd535}
 .pager button:disabled{opacity:0.35;cursor:default}
 .pager span{color:#848e9c;font-size:0.85rem}
 .loading{text-align:center;color:#848e9c;padding:2rem;grid-column:1/-1}
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;z-index:100;padding:1rem}
+.modal-box{background:#181a20;border:1px solid #2b3139;border-radius:14px;padding:1.5rem;width:100%;max-width:420px;max-height:90vh;overflow-y:auto}
+.modal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem}
+.modal-head h2{font-size:1.1rem;color:#fcd535}
+.modal-close{background:none;border:none;color:#848e9c;font-size:1.2rem;cursor:pointer}
+.modal-desc{color:#848e9c;font-size:0.82rem;margin-bottom:1.2rem;line-height:1.5}
+.cfg-label{display:block;color:#eaecef;font-size:0.85rem;margin-bottom:0.4rem;font-weight:600}
+.cfg-input{width:100%;padding:0.8rem;background:#0b0e11;border:1px solid #2b3139;border-radius:8px;color:#eaecef;font-size:1rem;margin-bottom:0.9rem}
+.cfg-input:focus{outline:none;border-color:#fcd535}
+.cfg-btn{width:100%;padding:0.85rem;background:#fcd535;color:#0b0e11;border:none;border-radius:8px;font-weight:700;font-size:0.9rem;cursor:pointer}
+.cfg-btn:hover{background:#f0b90b}
+.cfg-btn-sec{width:100%;padding:0.7rem;background:#2b3139;color:#eaecef;border:none;border-radius:8px;font-weight:600;font-size:0.82rem;cursor:pointer;margin-top:0.6rem}
+.cfg-btn-sec:hover{background:#3b4149}
+.cfg-msg{font-size:0.82rem;margin-top:0.8rem;text-align:center;min-height:1rem;color:#848e9c}
+.cfg-msg.err{color:#f6465d}
+.cfg-msg.ok{color:#0ecb81}
+.cfg-confirm{text-align:center;padding:0.5rem 0}
+.cfg-confirm p{color:#eaecef;font-size:0.95rem;margin-bottom:0.5rem}
+.cfg-desc-sm{color:#848e9c!important;font-size:0.8rem!important}
+.cfg-confirm-btns{display:flex;flex-direction:column;gap:0.6rem;margin-top:1.2rem}
+.cfg-btn-yes{padding:0.85rem;background:#0ecb81;color:#0b0e11;border:none;border-radius:8px;font-weight:700;cursor:pointer}
+.cfg-btn-no{padding:0.85rem;background:#2b3139;color:#f6465d;border:1px solid #f6465d;border-radius:8px;font-weight:600;cursor:pointer}
+.cfg-ok-box{background:rgba(14,203,129,0.1);border:1px solid rgba(14,203,129,0.3);border-radius:8px;padding:0.9rem;text-align:center;margin-bottom:1rem}
+.cfg-ok-box p{color:#eaecef;margin-bottom:0.3rem}
+.cfg-toggle-row{display:flex;justify-content:space-between;align-items:center;padding:0.8rem;background:#0b0e11;border-radius:8px;margin-bottom:0.3rem;color:#eaecef;font-size:0.9rem;gap:0.6rem}
+.cfg-toggle-row small{color:#848e9c;font-size:0.72rem}
+.cfg-tipos-titulo{color:#fcd535;font-size:0.8rem;font-weight:700;margin:0.9rem 0 0.4rem}
+.switch{position:relative;display:inline-block;width:46px;height:26px}
+.switch input{opacity:0;width:0;height:0}
+.slider{position:absolute;cursor:pointer;inset:0;background:#2b3139;border-radius:26px;transition:0.2s}
+.slider:before{position:absolute;content:"";height:20px;width:20px;left:3px;bottom:3px;background:#848e9c;border-radius:50%;transition:0.2s}
+.switch input:checked+.slider{background:rgba(14,203,129,0.3)}
+.switch input:checked+.slider:before{transform:translateX(20px);background:#0ecb81}
 </style></head><body>
-<header><h1>🐋 Whale Feed</h1><button class=logout onclick=logout()>Salir</button></header>
+<header><h1>🐋 Whale Feed</h1><div style="display:flex;gap:0.5rem"><button class=logout onclick=abrirConfig()>⚙️ Alertas</button><button class=logout onclick=logout()>Salir</button></div></header>
+<div id=modalConfig class=modal-overlay style=display:none>
+  <div class=modal-box>
+    <div class=modal-head><h2>⚙️ Configurar alertas por llamada</h2><button class=modal-close onclick=cerrarConfig()>✕</button></div>
+    <p class=modal-desc>Recibe una llamada de pocos tonos en tu móvil cuando el bot detecte una alerta importante (acumulación de ballenas o mega-ballena).</p>
+    <div id=cfgPaso1>
+      <label class=cfg-label>Tu número de teléfono</label>
+      <input type=tel id=cfgTel placeholder="+34 600 00 00 00" class=cfg-input>
+      <button class=cfg-btn onclick=guardarTelefono()>📞 Guardar y recibir llamada de prueba</button>
+      <div class=cfg-msg id=cfgMsg></div>
+    </div>
+    <div id=cfgPaso2 style=display:none>
+      <div class=cfg-confirm>
+        <p>📞 Te estamos llamando a <b id=cfgTelMostrar></b></p>
+        <p class=cfg-desc-sm>Debería sonar unos segundos y colgarse sola. ¿La has recibido?</p>
+        <div class=cfg-confirm-btns>
+          <button class=cfg-btn-yes onclick=confirmarLlamada()>✅ Sí, la he recibido</button>
+          <button class=cfg-btn-no onclick=reintentarTelefono()>❌ No / número incorrecto</button>
+        </div>
+      </div>
+    </div>
+    <div id=cfgPaso3 style=display:none>
+      <div class=cfg-ok-box>
+        <p>✅ <b>Número verificado</b></p>
+        <p class=cfg-desc-sm>Recibirás una llamada cuando salte una alerta.</p>
+      </div>
+      <div class=cfg-toggle-row>
+        <span><b>Llamadas de alerta</b></span>
+        <label class=switch><input type=checkbox id=cfgLlamadas onchange=toggleLlamadas()><span class=slider></span></label>
+      </div>
+      <div class=cfg-tipos-titulo>¿Cuándo quieres recibir la llamada?</div>
+      <div class=cfg-toggle-row>
+        <span>🟢 Acumulación de ballenas<br><small>Patrón pre-subida (tipo AKE)</small></span>
+        <label class=switch><input type=checkbox id=cfgAcum onchange=guardarPreferencias()><span class=slider></span></label>
+      </div>
+      <div class=cfg-toggle-row>
+        <span>🚨 Mega-ballena<br><small>Compra gigante (≥100K USD)</small></span>
+        <label class=switch><input type=checkbox id=cfgMega onchange=guardarPreferencias()><span class=slider></span></label>
+      </div>
+      <div class=cfg-toggle-row>
+        <span>🔥 Ráfaga de actividad<br><small>3+ señales de una moneda en 24h</small></span>
+        <label class=switch><input type=checkbox id=cfgRafaga onchange=guardarPreferencias()><span class=slider></span></label>
+      </div>
+      <button class=cfg-btn-sec onclick=probarLlamada()>📞 Llamada de prueba</button>
+      <button class=cfg-btn-sec onclick=reintentarTelefono()>✏️ Cambiar número</button>
+      <div class=cfg-msg id=cfgMsg3></div>
+    </div>
+  </div>
+</div>
 <div class=wrap>
 <div class=grid id=grid><div class=loading>Cargando señales...</div></div>
 <div class=pager id=pager style=display:none>
@@ -1496,6 +1595,71 @@ async function load(primeraVez){
 }
 window.addEventListener('resize',render);
 async function logout(){await fetch('/api/feed/logout',{method:'POST'});location.reload();}
+// ─── Configuración de alertas por llamada ───
+function mostrarPaso(n){
+  document.getElementById('cfgPaso1').style.display=n===1?'block':'none';
+  document.getElementById('cfgPaso2').style.display=n===2?'block':'none';
+  document.getElementById('cfgPaso3').style.display=n===3?'block':'none';
+}
+async function abrirConfig(){
+  document.getElementById('modalConfig').style.display='flex';
+  document.getElementById('cfgMsg').textContent='';
+  try{
+    var r=await fetch('/api/feed/config');
+    var c=await r.json();
+    if(c.verificado){
+      document.getElementById('cfgLlamadas').checked=c.llamadas_activas;
+      document.getElementById('cfgAcum').checked=c.avisar_acumulacion;
+      document.getElementById('cfgMega').checked=c.avisar_megaballena;
+      document.getElementById('cfgRafaga').checked=c.avisar_rafaga;
+      mostrarPaso(3);
+    }else{
+      if(c.telefono)document.getElementById('cfgTel').value=c.telefono;
+      mostrarPaso(1);
+    }
+  }catch(e){mostrarPaso(1);}
+}
+function cerrarConfig(){document.getElementById('modalConfig').style.display='none';}
+async function guardarTelefono(){
+  var tel=document.getElementById('cfgTel').value.trim();
+  var msg=document.getElementById('cfgMsg');
+  if(!tel){msg.className='cfg-msg err';msg.textContent='Introduce un número';return;}
+  msg.className='cfg-msg';msg.textContent='Llamando...';
+  var r=await fetch('/api/feed/config/telefono',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({telefono:tel})});
+  var d=await r.json();
+  if(d.ok){
+    document.getElementById('cfgTelMostrar').textContent=d.telefono;
+    mostrarPaso(2);
+  }else{
+    msg.className='cfg-msg err';msg.textContent=d.error||'Error al llamar';
+  }
+}
+async function confirmarLlamada(){
+  var r=await fetch('/api/feed/config/confirmar',{method:'POST'});
+  var d=await r.json();
+  if(d.ok){document.getElementById('cfgLlamadas').checked=true;mostrarPaso(3);}
+}
+function reintentarTelefono(){mostrarPaso(1);document.getElementById('cfgMsg').textContent='';}
+async function toggleLlamadas(){
+  var activar=document.getElementById('cfgLlamadas').checked;
+  await fetch('/api/feed/config/llamadas',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({activar:activar})});
+}
+async function guardarPreferencias(){
+  var prefs={
+    acumulacion:document.getElementById('cfgAcum').checked,
+    megaballena:document.getElementById('cfgMega').checked,
+    rafaga:document.getElementById('cfgRafaga').checked
+  };
+  await fetch('/api/feed/config/preferencias',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(prefs)});
+}
+async function probarLlamada(){
+  var msg=document.getElementById('cfgMsg3');
+  msg.className='cfg-msg';msg.textContent='Llamando...';
+  var r=await fetch('/api/feed/config/probar',{method:'POST'});
+  var d=await r.json();
+  if(d.ok){msg.className='cfg-msg ok';msg.textContent='📞 Llamada enviada';}
+  else{msg.className='cfg-msg err';msg.textContent=d.error||'Error';}
+}
 load(true);setInterval(function(){load(false);},30000);
 </script>
 </body></html>"""
@@ -2350,6 +2514,112 @@ def feed_logout():
     resp.set_cookie("feed_token", "", max_age=0)
     return resp
 
+@app.route('/api/feed/config', methods=['GET'])
+def feed_config_get():
+    """Devuelve la configuración de alertas del usuario logueado."""
+    from flask import request as _rq
+    token = _rq.cookies.get("feed_token", "")
+    username = _feed_sessions.get(token)
+    if not username:
+        return jsonify({"error": "no autorizado"}), 401
+    u = db_get("SELECT telefono, telefono_verificado, llamadas_activas, avisar_acumulacion, avisar_megaballena, avisar_rafaga FROM feed_users WHERE username=?", (username,))
+    if not u:
+        return jsonify({"error": "no encontrado"}), 404
+    return jsonify({
+        "telefono": u[0]["telefono"] or "",
+        "verificado": bool(u[0]["telefono_verificado"]),
+        "llamadas_activas": bool(u[0]["llamadas_activas"]),
+        "avisar_acumulacion": bool(u[0]["avisar_acumulacion"]),
+        "avisar_megaballena": bool(u[0]["avisar_megaballena"]),
+        "avisar_rafaga": bool(u[0]["avisar_rafaga"]),
+    })
+
+@app.route('/api/feed/config/telefono', methods=['POST'])
+def feed_config_telefono():
+    """Guarda el teléfono y dispara una llamada de confirmación."""
+    from flask import request as _rq
+    token = _rq.cookies.get("feed_token", "")
+    username = _feed_sessions.get(token)
+    if not username:
+        return jsonify({"error": "no autorizado"}), 401
+    data = _rq.get_json(force=True, silent=True) or {}
+    tel = _normalizar_telefono(data.get("telefono", ""))
+    if not tel or len(tel) < 9:
+        return jsonify({"ok": False, "error": "Número no válido"}), 400
+    # Guardar el número, marcándolo como NO verificado todavía
+    with db_lock:
+        conn = sqlite3.connect(DB_PATH, timeout=10)
+        conn.execute("UPDATE feed_users SET telefono=?, telefono_verificado=0 WHERE username=?", (tel, username))
+        conn.commit(); conn.close()
+    # Disparar llamada de confirmación
+    ok = llamar_macrodroid(tel)
+    if not ok:
+        return jsonify({"ok": False, "error": "No se pudo iniciar la llamada. Revisa el número."}), 500
+    return jsonify({"ok": True, "telefono": tel})
+
+@app.route('/api/feed/config/confirmar', methods=['POST'])
+def feed_config_confirmar():
+    """El usuario confirma que recibió la llamada → teléfono verificado + llamadas activas."""
+    from flask import request as _rq
+    token = _rq.cookies.get("feed_token", "")
+    username = _feed_sessions.get(token)
+    if not username:
+        return jsonify({"error": "no autorizado"}), 401
+    with db_lock:
+        conn = sqlite3.connect(DB_PATH, timeout=10)
+        conn.execute("UPDATE feed_users SET telefono_verificado=1, llamadas_activas=1 WHERE username=?", (username,))
+        conn.commit(); conn.close()
+    return jsonify({"ok": True})
+
+@app.route('/api/feed/config/llamadas', methods=['POST'])
+def feed_config_llamadas():
+    """Activa o desactiva las llamadas de alerta."""
+    from flask import request as _rq
+    token = _rq.cookies.get("feed_token", "")
+    username = _feed_sessions.get(token)
+    if not username:
+        return jsonify({"error": "no autorizado"}), 401
+    data = _rq.get_json(force=True, silent=True) or {}
+    activar = 1 if data.get("activar") else 0
+    with db_lock:
+        conn = sqlite3.connect(DB_PATH, timeout=10)
+        conn.execute("UPDATE feed_users SET llamadas_activas=? WHERE username=?", (activar, username))
+        conn.commit(); conn.close()
+    return jsonify({"ok": True, "llamadas_activas": bool(activar)})
+
+@app.route('/api/feed/config/preferencias', methods=['POST'])
+def feed_config_preferencias():
+    """Guarda qué tipos de alerta quiere recibir el usuario por llamada."""
+    from flask import request as _rq
+    token = _rq.cookies.get("feed_token", "")
+    username = _feed_sessions.get(token)
+    if not username:
+        return jsonify({"error": "no autorizado"}), 401
+    data = _rq.get_json(force=True, silent=True) or {}
+    acum = 1 if data.get("acumulacion") else 0
+    mega = 1 if data.get("megaballena") else 0
+    raf  = 1 if data.get("rafaga") else 0
+    with db_lock:
+        conn = sqlite3.connect(DB_PATH, timeout=10)
+        conn.execute("UPDATE feed_users SET avisar_acumulacion=?, avisar_megaballena=?, avisar_rafaga=? WHERE username=?",
+                     (acum, mega, raf, username))
+        conn.commit(); conn.close()
+    return jsonify({"ok": True})
+
+@app.route('/api/feed/config/probar', methods=['POST'])
+def feed_config_probar():
+    """Reenvía una llamada de prueba al número guardado."""
+    from flask import request as _rq
+    token = _rq.cookies.get("feed_token", "")
+    username = _feed_sessions.get(token)
+    if not username:
+        return jsonify({"error": "no autorizado"}), 401
+    u = db_get("SELECT telefono FROM feed_users WHERE username=?", (username,))
+    if not u or not u[0]["telefono"]:
+        return jsonify({"ok": False, "error": "No hay número guardado"}), 400
+    ok = llamar_macrodroid(u[0]["telefono"])
+    return jsonify({"ok": ok})
+
 @app.route('/api/feed/signals')
 def feed_signals():
     from flask import request as _rq
@@ -3168,6 +3438,79 @@ def twilio_llamada(pair, priceDiff, volInEUR):
 # Interruptor de SMS: puesto en False para desactivar los avisos por SMS
 SMS_ACTIVADO = False
 
+def _normalizar_telefono(tel):
+    """Limpia un teléfono y lo deja en formato internacional +34..."""
+    if not tel:
+        return None
+    t = "".join(c for c in str(tel) if c.isdigit() or c == "+")
+    if not t:
+        return None
+    if not t.startswith("+"):
+        # Si son 9 dígitos (España), anteponer +34
+        digitos = t.lstrip("+")
+        if len(digitos) == 9:
+            t = "+34" + digitos
+        else:
+            t = "+" + digitos
+    return t
+
+def llamar_macrodroid(telefono):
+    """Dispara una llamada de alerta vía MacroDroid (llamada de pocos tonos que cuelga sola)."""
+    tel = _normalizar_telefono(telefono)
+    if not tel or not MACRODROID_WEBHOOK:
+        print("⚠️ MacroDroid: sin teléfono o webhook")
+        return False
+    try:
+        from urllib.parse import quote
+        # Codificar el + como %2B para que MacroDroid reciba el número completo
+        url = f"{MACRODROID_WEBHOOK}?numero={quote(tel, safe='')}"
+        r = requests.get(url, timeout=10)
+        print(f"📞 Llamada MacroDroid a {tel}: {r.status_code}")
+        return r.status_code == 200
+    except Exception as e:
+        print(f"⚠️ Error MacroDroid a {tel}: {e}")
+        return False
+
+def notificar_llamadas_alerta(tipo="acumulacion"):
+    """Llama a los usuarios del feed con llamadas activas, teléfono verificado Y que hayan
+    elegido recibir ESTE tipo de alerta (acumulacion / megaballena / rafaga)."""
+    col = {
+        "acumulacion": "avisar_acumulacion",
+        "megaballena": "avisar_megaballena",
+        "rafaga": "avisar_rafaga",
+    }.get(tipo, "avisar_acumulacion")
+    try:
+        usuarios = db_get(
+            f"SELECT username, telefono FROM feed_users "
+            f"WHERE estado='activo' AND llamadas_activas=1 AND telefono_verificado=1 "
+            f"AND telefono IS NOT NULL AND {col}=1"
+        )
+        for u in usuarios:
+            llamar_macrodroid(u["telefono"])
+    except Exception as e:
+        print(f"⚠️ Error notificar_llamadas_alerta: {e}")
+
+# Cooldown de ráfaga por par (para las llamadas del feed)
+_rafaga_ultima = {}
+
+def comprobar_rafaga(pair):
+    """Si una moneda acumula RAFAGA_FEED_COUNT señales en RAFAGA_FEED_HORAS, dispara llamadas de ráfaga."""
+    from datetime import datetime, timedelta
+    import time as _t
+    try:
+        now = _t.time()
+        if pair in _rafaga_ultima and now - _rafaga_ultima[pair] < RAFAGA_FEED_COOLDOWN_H*3600:
+            return
+        desde = (datetime.utcnow() - timedelta(hours=RAFAGA_FEED_HORAS)).isoformat()
+        rows = db_get("SELECT COUNT(*) AS n FROM signals WHERE pair=? AND timestamp>=?", (pair, desde))
+        n = rows[0]["n"] if rows else 0
+        if n >= RAFAGA_FEED_COUNT:
+            _rafaga_ultima[pair] = now
+            print(f"🔥 Ráfaga detectada: {pair} ({n} señales en {RAFAGA_FEED_HORAS}h) — llamando")
+            notificar_llamadas_alerta("rafaga")
+    except Exception as e:
+        print(f"⚠️ Error comprobar_rafaga: {e}")
+
 def enviar_sms(texto):
     """Envía un SMS vía httpSMS a uno o varios números (HTTPSMS_TO separados por coma)."""
     if not SMS_ACTIVADO:
@@ -3346,6 +3689,9 @@ def alerta_acumulacion(pair, datos, ticker):
     sms = f"ACUMULACION {pair}: {datos['n_compra']} ballenas comprando (ratio {datos['ratio']}:1), precio plano {datos['subida_actual']:+.1f}%, mcap {mcap_str}"
     enviar_sms(sms)
 
+    # Llamadas de alerta a los usuarios del feed (en hilo, no bloquea)
+    threading.Thread(target=notificar_llamadas_alerta, args=("acumulacion",), daemon=True).start()
+
 
 def alerta_mega_ballena(pair, side, usd, precio, ticker):
     """Notificación destacada (Telegram + SMS) para compras gigantes >= MEGA_BALLENA_USD."""
@@ -3383,6 +3729,9 @@ def alerta_mega_ballena(pair, side, usd, precio, ticker):
     # SMS con los datos de la moneda
     sms = f"MEGA BALLENA {lado} {pair}: {anotateVolume(usd)}USD @ {precio} | 24h {chg_str} | Vol {vol_str}"
     enviar_sms(sms)
+
+    # Llamadas de alerta a los usuarios del feed (en hilo, no bloquea)
+    threading.Thread(target=notificar_llamadas_alerta, args=("megaballena",), daemon=True).start()
 
 
 def tradeLoop(pairsList, wsnames, pairs, eurPrices, label):
@@ -3498,6 +3847,8 @@ def tradeLoop(pairsList, wsnames, pairs, eurPrices, label):
                     # Guardar siempre en BD para análisis
                     signal_id = save_signal(tradeDF, pair, volInEUR, priceDiff)
                     launch_tracker(signal_id, pair, entry_price)
+                    # Comprobar ráfaga (N señales de la misma moneda en 24h) para llamadas del feed
+                    threading.Thread(target=comprobar_rafaga, args=(pair,), daemon=True).start()
                     # Guardar siempre — enviar a TG solo si vol 24h > 50K$
                     ticker = get_ticker_24h(pair)
                     vol_24h = ticker['vol_24h_base'] if ticker else None
