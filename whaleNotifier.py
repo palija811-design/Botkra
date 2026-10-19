@@ -41,7 +41,9 @@ HTTPSMS_FROM    = os.getenv("HTTPSMS_FROM", "+34667288899")
 HTTPSMS_TO      = os.getenv("HTTPSMS_TO", "+34693800942,+34638490822")
 MEGA_BALLENA_USD = 100000   # umbral compra gigante para alerta extra + SMS
 # ── Llamada de alerta vía MacroDroid (webhook) ──
-MACRODROID_WEBHOOK = os.getenv("MACRODROID_WEBHOOK", "https://trigger.macrodroid.com/63f9398b-2caf-4f00-8b61-6aca389ea939/llamada")
+# ── Llamadas de alerta vía Twilio Function (reusa tu endpoint serverless) ──
+# El bot pasa el número del usuario a tu función, que hace la llamada y cuelga a los pocos tonos.
+TWILIO_FUNCTION_URL = os.getenv("TWILIO_FUNCTION_URL", "https://alertastrading-2306.twil.io/llamada-bot")
 # ── Ráfaga: N señales de una misma moneda en una ventana → llamada ──
 RAFAGA_FEED_COUNT = 3        # nº de señales para disparar la ráfaga
 RAFAGA_FEED_HORAS = 24       # ventana en horas
@@ -1253,9 +1255,9 @@ FEED_HTML = """<!DOCTYPE html><html lang=es><head><meta charset=utf-8>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;font-family:-apple-system,Segoe UI,Roboto,sans-serif}
 body{background:#0b0e11;color:#eaecef;min-height:100vh}
-header{position:sticky;top:0;background:#181a20;border-bottom:1px solid #2b3139;padding:1rem 1.2rem;display:flex;justify-content:space-between;align-items:center;z-index:10}
-header h1{font-size:1.1rem;color:#fcd535}
-.logout{background:none;border:1px solid #2b3139;color:#848e9c;padding:0.4rem 0.8rem;border-radius:6px;font-size:0.75rem;cursor:pointer}
+header{position:sticky;top:0;background:#181a20;border-bottom:1px solid #2b3139;padding:0.9rem 1rem;display:flex;justify-content:space-between;align-items:center;gap:0.5rem;z-index:10}
+header h1{font-size:1rem;color:#fcd535;white-space:nowrap}
+.logout{background:none;border:1px solid #2b3139;color:#eaecef;padding:0.45rem 0.7rem;border-radius:6px;font-size:0.75rem;cursor:pointer;white-space:nowrap;flex-shrink:0}
 .wrap{max-width:1200px;margin:0 auto;padding:1rem}
 /* Grid en escritorio, columna en móvil */
 .grid{display:grid;grid-template-columns:1fr;gap:0.8rem}
@@ -1351,7 +1353,7 @@ header h1{font-size:1.1rem;color:#fcd535}
 .switch input:checked+.slider{background:rgba(14,203,129,0.3)}
 .switch input:checked+.slider:before{transform:translateX(20px);background:#0ecb81}
 </style></head><body>
-<header><h1>🐋 Whale Feed</h1><div style="display:flex;gap:0.5rem"><button class=logout onclick=abrirConfig()>⚙️ Alertas</button><button class=logout onclick=logout()>Salir</button></div></header>
+<header><h1>🐋 Whale Feed</h1><div style="display:flex;gap:0.4rem;flex-shrink:0"><button class=logout style="border-color:#fcd535;color:#fcd535" onclick=abrirConfig()>⚙️ Alertas</button><button class=logout onclick=logout()>Salir</button></div></header>
 <div id=modalConfig class=modal-overlay style=display:none>
   <div class=modal-box>
     <div class=modal-head><h2>⚙️ Configurar alertas por llamada</h2><button class=modal-close onclick=cerrarConfig()>✕</button></div>
@@ -2552,7 +2554,7 @@ def feed_config_telefono():
         conn.execute("UPDATE feed_users SET telefono=?, telefono_verificado=0 WHERE username=?", (tel, username))
         conn.commit(); conn.close()
     # Disparar llamada de confirmación
-    ok = llamar_macrodroid(tel)
+    ok = realizar_llamada(tel)
     if not ok:
         return jsonify({"ok": False, "error": "No se pudo iniciar la llamada. Revisa el número."}), 500
     return jsonify({"ok": True, "telefono": tel})
@@ -2617,7 +2619,7 @@ def feed_config_probar():
     u = db_get("SELECT telefono FROM feed_users WHERE username=?", (username,))
     if not u or not u[0]["telefono"]:
         return jsonify({"ok": False, "error": "No hay número guardado"}), 400
-    ok = llamar_macrodroid(u[0]["telefono"])
+    ok = realizar_llamada(u[0]["telefono"])
     return jsonify({"ok": ok})
 
 @app.route('/api/feed/signals')
@@ -3454,21 +3456,20 @@ def _normalizar_telefono(tel):
             t = "+" + digitos
     return t
 
-def llamar_macrodroid(telefono):
-    """Dispara una llamada de alerta vía MacroDroid (llamada de pocos tonos que cuelga sola)."""
+def realizar_llamada(telefono):
+    """Llamada de alerta vía tu Twilio Function. Le pasa el número del usuario como
+    parámetro; la función (en Twilio) hace la llamada y cuelga a los pocos tonos."""
     tel = _normalizar_telefono(telefono)
-    if not tel or not MACRODROID_WEBHOOK:
-        print("⚠️ MacroDroid: sin teléfono o webhook")
+    if not tel or not TWILIO_FUNCTION_URL:
+        print("⚠️ Llamada: sin teléfono o sin TWILIO_FUNCTION_URL")
         return False
     try:
-        from urllib.parse import quote
-        # Codificar el + como %2B para que MacroDroid reciba el número completo
-        url = f"{MACRODROID_WEBHOOK}?numero={quote(tel, safe='')}"
-        r = requests.get(url, timeout=10)
-        print(f"📞 Llamada MacroDroid a {tel}: {r.status_code}")
-        return r.status_code == 200
+        r = requests.get(TWILIO_FUNCTION_URL, params={"to": tel}, timeout=10)
+        ok = r.status_code == 200
+        print(f"📞 Llamada Twilio a {tel}: {r.status_code}" + ("" if ok else f" | {r.text[:150]}"))
+        return ok
     except Exception as e:
-        print(f"⚠️ Error MacroDroid a {tel}: {e}")
+        print(f"⚠️ Error llamada a {tel}: {e}")
         return False
 
 def notificar_llamadas_alerta(tipo="acumulacion"):
@@ -3486,7 +3487,7 @@ def notificar_llamadas_alerta(tipo="acumulacion"):
             f"AND telefono IS NOT NULL AND {col}=1"
         )
         for u in usuarios:
-            llamar_macrodroid(u["telefono"])
+            realizar_llamada(u["telefono"])
     except Exception as e:
         print(f"⚠️ Error notificar_llamadas_alerta: {e}")
 
